@@ -1034,6 +1034,7 @@ Penerapan konsep ini bermanfaat langsung dalam memecahkan permasalahan kehidupan
             switchJurnalTab('siswa');
         }
 
+        // ==================== UNIVERSAL SMART EXCEL IMPORT ====================
         function importStudentsFromExcel(e) {
             const file = e.target.files[0];
             if (!file) return;
@@ -1042,41 +1043,95 @@ Penerapan konsep ini bermanfaat langsung dalam memecahkan permasalahan kehidupan
                 const data = new Uint8Array(evt.target.result);
                 const workbook = XLSX.read(data, { type: 'array' });
                 
-                let allRows = [];
+                let importedStudents = [];
+
+                // Telusuri setiap sheet yang ada di file Excel (misal sheet XA, XB, dll)
                 workbook.SheetNames.forEach(sheetName => {
                     const sheet = workbook.Sheets[sheetName];
-                    const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
-                    allRows = allRows.concat(rows);
-                });
+                    const dfRaw = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+                    
+                    let headerRowIdx = -1;
+                    let nameColIdx = -1;
+                    let nisColIdx = -1;
+                    let classColIdx = -1;
 
-                let count = 0;
-                allRows.forEach((r, idx) => {
-                    const rowLower = {};
-                    Object.keys(r).forEach(k => {
-                        rowLower[k.toLowerCase().trim()] = r[k];
-                    });
+                    // 1. Cari baris header yang mengandung teks 'nama'
+                    for (let r = 0; r < dfRaw.length; r++) {
+                        const row = dfRaw[r];
+                        for (let c = 0; c < row.length; c++) {
+                            const val = String(row[c]).trim().toLowerCase();
+                            if (val.includes('nama') && !val.includes('mata pelajaran') && !val.includes('guru')) {
+                                headerRowIdx = r;
+                                nameColIdx = c;
+                            }
+                            if (val.includes('nis') || val.includes('induk')) {
+                                nisColIdx = c;
+                            }
+                            if (val.includes('kelas') || val.includes('rombel')) {
+                                classColIdx = c;
+                            }
+                        }
+                        if (headerRowIdx !== -1) break;
+                    }
 
-                    const name = rowLower['nama'] || rowLower['nama lengkap'] || rowLower['nama siswa'] || rowLower['student name'] || rowLower['nama peserta didik'];
-                    const nis = rowLower['nisn'] || rowLower['nis'] || rowLower['no induk'] || rowLower['nomor induk'];
-                    const className = rowLower['kelas'] || rowLower['rombel'] || rowLower['rombongan belajar'] || rowLower['class'] || 'Umum';
+                    // 2. Fallback Heuristik: Jika header teks tidak ketemu, cari kolom teks yang baris pertamanya berupa angka urut (1, 2, 3...)
+                    if (headerRowIdx === -1) {
+                        for (let r = 0; r < dfRaw.length; r++) {
+                            const row = dfRaw[r];
+                            if (row.length > 1 && (String(row[0]).trim() === '1' || String(row[0]).trim() === '1.')) {
+                                headerRowIdx = r - 1;
+                                nameColIdx = 1; // Kolom ke-1 biasanya nama jika kolom 0 adalah nomor
+                                break;
+                            }
+                        }
+                    }
 
-                    if (name && String(name).trim() !== "" && !String(name).toLowerCase().includes('data master') && !String(name).toLowerCase().includes('daftar siswa')) {
-                        appData.students.push({
-                            id: 'stu_' + Date.now() + '_' + idx,
-                            name: String(name).trim(),
-                            nis: String(nis || '').trim(),
-                            className: String(className).trim()
-                        });
-                        count++;
+                    // 3. Ekstrak data baris di bawah header
+                    const startRow = headerRowIdx !== -1 ? headerRowIdx + 1 : 0;
+                    for (let r = startRow; r < dfRaw.length; r++) {
+                        const row = dfRaw[r];
+                        
+                        // Jika nameColIdx belum ketemu tapi row punya minimal 2 kolom
+                        let curNameCol = nameColIdx !== -1 ? nameColIdx : (row.length > 1 ? 1 : 0);
+                        
+                        if (curNameCol < row.length) {
+                            const rawName = row[curNameCol];
+                            if (rawName !== undefined && rawName !== null) {
+                                const nameStr = String(rawName).trim();
+                                
+                                // Validasi agar baris benar-benar nama siswa (bukan kosong, bukan angka, bukan teks judul)
+                                if (nameStr !== "" && isNaN(nameStr) && 
+                                    !nameStr.toLowerCase().includes('presensi') && 
+                                    !nameStr.toLowerCase().includes('data master') && 
+                                    !['nama', 'nama lengkap', 'no.', 'no', 'nama siswa'].includes(nameStr.toLowerCase())) {
+                                    
+                                    const nis = nisColIdx !== -1 && nisColIdx < row.length ? String(row[nisColIdx]).trim() : '';
+                                    
+                                    // Tentukan nama kelas (ambil dari kolom kelas, atau fallback ke Nama Sheet misal XA)
+                                    let className = classColIdx !== -1 && classColIdx < row.length && String(row[classColIdx]).trim() !== "" ? String(row[classColIdx]).trim() : sheetName;
+                                    if (className.toLowerCase() === 'sheet1' || className.toLowerCase() === 'data siswa' || className.toLowerCase() === 'Sheet1') {
+                                        className = 'Umum';
+                                    }
+
+                                    importedStudents.push({
+                                        id: 'stu_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+                                        name: nameStr,
+                                        nis: nis === 'nan' ? '' : nis,
+                                        className: className
+                                    });
+                                }
+                            }
+                        }
                     }
                 });
 
-                if (count > 0) {
+                if (importedStudents.length > 0) {
+                    appData.students = appData.students.concat(importedStudents);
                     saveDataToCloud();
                     switchJurnalTab('siswa');
-                    alert(`Berhasil mengimpor ${count} data siswa secara otomatis dari file Excel sekolah!`);
+                    alert(`Berhasil mengimpor ${importedStudents.length} data siswa secara otomatis dari file sekolah!`);
                 } else {
-                    alert("Gagal mendeteksi kolom nama siswa. Pastikan file Excel memiliki header seperti 'Nama', 'NISN', atau 'Kelas'.");
+                    alert("Gagal mendeteksi nama siswa. Pastikan file Excel memuat kolom nama siswa.");
                 }
             };
             reader.readAsArrayBuffer(file);
