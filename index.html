@@ -794,7 +794,7 @@ Penerapan konsep ini bermanfaat langsung dalam memecahkan permasalahan kehidupan
                             <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
                                 <input type="text" id="stuName" placeholder="Nama Lengkap Siswa" class="md:col-span-2 p-2.5 border border-slate-200 rounded-xl text-sm bg-white">
                                 <input type="text" id="stuNis" placeholder="NIS / NISN" class="p-2.5 border border-slate-200 rounded-xl text-sm bg-white">
-                                <input type="text" id="stuClass" placeholder="Kelas (Contoh: 7A)" class="p-2.5 border border-slate-200 rounded-xl text-sm bg-white">
+                                <input type="text" id="stuClass" placeholder="Kelas (Contoh: XA)" class="p-2.5 border border-slate-200 rounded-xl text-sm bg-white">
                             </div>
                             <div class="flex justify-between items-center">
                                 <span class="text-[11px] text-slate-500">*Impor Excel otomatis mendeteksi format apa pun dari sekolah secara cerdas.</span>
@@ -835,6 +835,13 @@ Penerapan konsep ini bermanfaat langsung dalam memecahkan permasalahan kehidupan
             } else if (tab === 'presensi') {
                 const today = new Date().toISOString().split('T')[0];
                 const selectedDate = document.getElementById('presensiDate')?.value || today;
+                
+                // Ambil daftar kelas unik dari data siswa
+                const classList = [...new Set(appData.students.map(s => s.className))].sort();
+                const selectedClass = document.getElementById('presensiClassFilter')?.value || (classList.length > 0 ? classList[0] : '');
+
+                // Filter siswa berdasarkan kelas yang dipilih
+                const filteredStudents = appData.students.filter(st => st.className === selectedClass);
                 const dailyAtt = appData.attendance[selectedDate] || {};
 
                 container.innerHTML = `
@@ -842,12 +849,16 @@ Penerapan konsep ini bermanfaat langsung dalam memecahkan permasalahan kehidupan
                         <div class="flex flex-wrap justify-between items-center gap-3">
                             <div>
                                 <h2 class="text-lg font-bold text-slate-900">Presensi Kehadiran Siswa</h2>
-                                <p class="text-xs text-slate-500">Gunakan tombol "Hadir Semua" untuk mempercepat pengisian.</p>
+                                <p class="text-xs text-slate-500">Pilih kelas dan tanggal presensi sesuai jadwal mengajar Anda.</p>
                             </div>
-                            <div class="flex items-center space-x-2">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <select id="presensiClassFilter" onchange="switchJurnalTab('presensi')" class="p-2 border border-slate-200 rounded-xl text-xs font-bold bg-white text-indigo-700">
+                                    ${classList.map(cls => `<option value="${cls}" ${cls === selectedClass ? 'selected' : ''}>Kelas: ${cls}</option>`).join('')}
+                                    ${classList.length === 0 ? '<option value="">Belum ada kelas</option>' : ''}
+                                </select>
                                 <input type="date" id="presensiDate" value="${selectedDate}" onchange="switchJurnalTab('presensi')" class="p-2 border border-slate-200 rounded-xl text-xs font-semibold">
-                                <button onclick="markAllPresent('${selectedDate}')" class="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow flex items-center">
-                                    <i class="fa-solid fa-check-double mr-1.5"></i> Hadir Semua
+                                <button onclick="markAllPresentForClass('${selectedDate}', '${selectedClass}')" class="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow flex items-center">
+                                    <i class="fa-solid fa-check-double mr-1.5"></i> Hadir Semua (${selectedClass || '-'})
                                 </button>
                             </div>
                         </div>
@@ -856,20 +867,20 @@ Penerapan konsep ini bermanfaat langsung dalam memecahkan permasalahan kehidupan
                             <table class="w-full text-left text-sm border-collapse">
                                 <thead class="bg-slate-100 text-slate-700">
                                     <tr>
-                                        <th class="p-3 rounded-tl-xl">No</th>
+                                        <th class="p-3 rounded-tl-xl w-16">No</th>
                                         <th class="p-3">Nama Siswa</th>
-                                        <th class="p-3">Kelas</th>
+                                        <th class="p-3 w-28">Kelas</th>
                                         <th class="p-3 rounded-tr-xl text-center">Keterangan Kehadiran</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    ${appData.students.map((st, idx) => {
+                                    ${filteredStudents.map((st, idx) => {
                                         const status = dailyAtt[st.id] || '';
                                         return `
-                                        <tr class="border-b border-slate-100">
+                                        <tr class="border-b border-slate-100 hover:bg-slate-50">
                                             <td class="p-3">${idx + 1}</td>
-                                            <td class="p-3 font-semibold text-slate-800">${st.name}</td>
-                                            <td class="p-3 text-xs text-slate-500">${st.className}</td>
+                                            <td class="p-3 font-semibold text-slate-800">${st.name} <span class="text-xs font-normal text-slate-400">(${st.nis || '-'})</span></td>
+                                            <td class="p-3 text-xs font-medium text-emerald-700">${st.className}</td>
                                             <td class="p-3">
                                                 <div class="flex justify-center space-x-2 sm:space-x-3">
                                                     <label class="cursor-pointer px-2.5 py-1 rounded-lg border text-xs font-semibold flex items-center ${status === 'hadir' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-600 border-slate-200'}">
@@ -887,13 +898,13 @@ Penerapan konsep ini bermanfaat langsung dalam memecahkan permasalahan kehidupan
                                                 </div>
                                             </td>
                                         </tr>`;
-                                    }).join('') || '<tr><td colspan="4" class="p-6 text-center text-xs text-slate-400">Belum ada data siswa.</td></tr>'}
+                                    }).join('') || `<tr><td colspan="4" class="p-6 text-center text-xs text-slate-400">Tidak ada siswa di kelas ${selectedClass || 'ini'}. Silakan impor data siswa terlebih dahulu.</td></tr>`}
                                 </tbody>
                             </table>
                         </div>
                         <div class="flex justify-end">
                             <button onclick="saveDataToCloud(true)" class="px-5 py-2.5 bg-[#0d8a5e] hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold shadow">
-                                <i class="fa-solid fa-floppy-disk mr-1.5"></i> Simpan Presensi Hari Ini
+                                <i class="fa-solid fa-floppy-disk mr-1.5"></i> Simpan Presensi Kelas ${selectedClass}
                             </button>
                         </div>
                     </div>
@@ -1045,7 +1056,6 @@ Penerapan konsep ini bermanfaat langsung dalam memecahkan permasalahan kehidupan
                 
                 let importedStudents = [];
 
-                // Telusuri setiap sheet yang ada di file Excel (misal sheet XA, XB, dll)
                 workbook.SheetNames.forEach(sheetName => {
                     const sheet = workbook.Sheets[sheetName];
                     const dfRaw = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
@@ -1055,7 +1065,6 @@ Penerapan konsep ini bermanfaat langsung dalam memecahkan permasalahan kehidupan
                     let nisColIdx = -1;
                     let classColIdx = -1;
 
-                    // 1. Cari baris header yang mengandung teks 'nama'
                     for (let r = 0; r < dfRaw.length; r++) {
                         const row = dfRaw[r];
                         for (let c = 0; c < row.length; c++) {
@@ -1074,24 +1083,20 @@ Penerapan konsep ini bermanfaat langsung dalam memecahkan permasalahan kehidupan
                         if (headerRowIdx !== -1) break;
                     }
 
-                    // 2. Fallback Heuristik: Jika header teks tidak ketemu, cari kolom teks yang baris pertamanya berupa angka urut (1, 2, 3...)
                     if (headerRowIdx === -1) {
                         for (let r = 0; r < dfRaw.length; r++) {
                             const row = dfRaw[r];
                             if (row.length > 1 && (String(row[0]).trim() === '1' || String(row[0]).trim() === '1.')) {
                                 headerRowIdx = r - 1;
-                                nameColIdx = 1; // Kolom ke-1 biasanya nama jika kolom 0 adalah nomor
+                                nameColIdx = 1;
                                 break;
                             }
                         }
                     }
 
-                    // 3. Ekstrak data baris di bawah header
                     const startRow = headerRowIdx !== -1 ? headerRowIdx + 1 : 0;
                     for (let r = startRow; r < dfRaw.length; r++) {
                         const row = dfRaw[r];
-                        
-                        // Jika nameColIdx belum ketemu tapi row punya minimal 2 kolom
                         let curNameCol = nameColIdx !== -1 ? nameColIdx : (row.length > 1 ? 1 : 0);
                         
                         if (curNameCol < row.length) {
@@ -1099,7 +1104,6 @@ Penerapan konsep ini bermanfaat langsung dalam memecahkan permasalahan kehidupan
                             if (rawName !== undefined && rawName !== null) {
                                 const nameStr = String(rawName).trim();
                                 
-                                // Validasi agar baris benar-benar nama siswa (bukan kosong, bukan angka, bukan teks judul)
                                 if (nameStr !== "" && isNaN(nameStr) && 
                                     !nameStr.toLowerCase().includes('presensi') && 
                                     !nameStr.toLowerCase().includes('data master') && 
@@ -1107,7 +1111,6 @@ Penerapan konsep ini bermanfaat langsung dalam memecahkan permasalahan kehidupan
                                     
                                     const nis = nisColIdx !== -1 && nisColIdx < row.length ? String(row[nisColIdx]).trim() : '';
                                     
-                                    // Tentukan nama kelas (ambil dari kolom kelas, atau fallback ke Nama Sheet misal XA)
                                     let className = classColIdx !== -1 && classColIdx < row.length && String(row[classColIdx]).trim() !== "" ? String(row[classColIdx]).trim() : sheetName;
                                     if (className.toLowerCase() === 'sheet1' || className.toLowerCase() === 'data siswa' || className.toLowerCase() === 'Sheet1') {
                                         className = 'Umum';
@@ -1147,16 +1150,17 @@ Penerapan konsep ini bermanfaat langsung dalam memecahkan permasalahan kehidupan
         function setStudentAttendance(date, studentId, status) {
             if (!appData.attendance[date]) appData.attendance[date] = {};
             appData.attendance[date][studentId] = status;
-            switchJurnalTab('presensi');
         }
 
-        function markAllPresent(date) {
-            if (appData.students.length === 0) return alert("Belum ada data siswa.");
+        function markAllPresentForClass(date, className) {
+            const classStudents = appData.students.filter(st => st.className === className);
+            if (classStudents.length === 0) return alert(`Tidak ada siswa di kelas ${className}.`);
             if (!appData.attendance[date]) appData.attendance[date] = {};
-            appData.students.forEach(st => {
+            classStudents.forEach(st => {
                 appData.attendance[date][st.id] = 'hadir';
             });
             switchJurnalTab('presensi');
+            alert(`Semua siswa kelas ${className} ditandai Hadir untuk hari ini!`);
         }
 
         function getPredicate(score) {
