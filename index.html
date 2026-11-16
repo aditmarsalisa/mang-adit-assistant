@@ -326,4 +326,815 @@
             if (portal === 'perangkat') {
                 renderPerangkatAjarApp();
             } else {
-                render
+                renderJurnalGuruApp();
+            }
+        }
+
+        // ==================== 1. PORTAL PERANGKAT AJAR ====================
+        function renderPerangkatAjarApp() {
+            const app = document.getElementById('app');
+            app.innerHTML = `
+                <div class="max-w-6xl mx-auto w-full p-4 md:p-6 space-y-6">
+                    <div class="bg-indigo-950 text-white p-5 rounded-2xl shadow-lg flex flex-wrap justify-between items-center gap-4">
+                        <div class="flex items-center space-x-4">
+                            <button onclick="renderPortalSelector()" class="px-3 py-2 bg-indigo-900 hover:bg-indigo-800 rounded-xl text-xs font-semibold flex items-center transition">
+                                <i class="fa-solid fa-arrow-left mr-2"></i> Menu Utama
+                            </button>
+                            <div>
+                                <span class="px-2 py-0.5 bg-indigo-600 text-[10px] font-bold uppercase rounded tracking-wider">Perangkat Ajar</span>
+                                <h1 class="font-bold text-lg md:text-xl mt-0.5">Mang Adit Assistant</h1>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <button onclick="enterPortal('jurnal')" class="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-xs font-semibold transition">
+                                Pindah Portal <i class="fa-solid fa-right-left ml-1"></i>
+                            </button>
+                            <button onclick="currentUser=null; renderAuth('login')" class="px-3 py-2 bg-rose-500 hover:bg-rose-600 rounded-xl text-xs font-semibold transition">
+                                Keluar
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-3 gap-3">
+                        <button onclick="switchPerangkatTab('modul')" id="pTabModul" class="py-3 px-4 rounded-xl font-semibold text-sm shadow-sm transition flex items-center justify-center">
+                            <i class="fa-solid fa-file-lines mr-2"></i> Modul & Bahan Ajar
+                        </button>
+                        <button onclick="switchPerangkatTab('kisi')" id="pTabKisi" class="py-3 px-4 rounded-xl font-semibold text-sm shadow-sm transition flex items-center justify-center">
+                            <i class="fa-solid fa-table-list mr-2"></i> Kisi-Kisi Soal
+                        </button>
+                        <button onclick="switchPerangkatTab('soal')" id="pTabSoal" class="py-3 px-4 rounded-xl font-semibold text-sm shadow-sm transition flex items-center justify-center">
+                            <i class="fa-solid fa-list-check mr-2"></i> Bank Soal & GForm
+                        </button>
+                    </div>
+
+                    <div id="perangkatContent"></div>
+                </div>
+            `;
+            switchPerangkatTab('modul');
+        }
+
+        function switchPerangkatTab(tab) {
+            ['Modul', 'Kisi', 'Soal'].forEach(t => {
+                const el = document.getElementById('pTab' + t);
+                if (el) {
+                    const isActive = t.toLowerCase() === tab.toLowerCase();
+                    el.className = isActive
+                        ? 'py-3 px-4 rounded-xl font-semibold text-sm shadow-md transition flex items-center justify-center bg-indigo-600 text-white'
+                        : 'py-3 px-4 rounded-xl font-semibold text-sm shadow-sm transition flex items-center justify-center bg-white text-slate-600 hover:bg-slate-100 border border-slate-200';
+                }
+            });
+
+            const container = document.getElementById('perangkatContent');
+            if (tab === 'modul') {
+                container.innerHTML = `
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+                        <div class="flex justify-between items-center flex-wrap gap-2">
+                            <div>
+                                <h2 class="text-lg font-bold text-slate-900">Modul Ajar / RPP & Bahan Ajar</h2>
+                                <p class="text-xs text-slate-500">Susun perangkat pembelajaran Kurikulum Merdeka.</p>
+                            </div>
+                            <button onclick="fillModulTemplate()" class="px-3 py-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-xl text-xs font-semibold">
+                                <i class="fa-solid fa-wand-magic-sparkles mr-1"></i> Templat Kurikulum Merdeka
+                            </button>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <input type="text" id="modulTitle" placeholder="Judul Modul / Materi Pokok" class="p-2.5 border border-slate-200 rounded-xl text-sm">
+                            <input type="text" id="modulClass" placeholder="Fase / Kelas (Contoh: Fase D / Kelas 7)" class="p-2.5 border border-slate-200 rounded-xl text-sm">
+                        </div>
+                        <textarea id="modulBody" class="w-full h-44 p-3 border border-slate-200 rounded-xl text-sm" placeholder="Tujuan Pembelajaran, Pemahaman Bermakna, Langkah Kegiatan Pembelajaran, dan Ringkasan Bahan Ajar..."></textarea>
+                        <div class="flex justify-end space-x-2">
+                            <button onclick="saveModulItem()" class="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold shadow">
+                                <i class="fa-solid fa-cloud-arrow-up mr-1"></i> Simpan ke Cloud
+                            </button>
+                        </div>
+                        <div class="pt-4 border-t border-slate-100">
+                            <h3 class="font-bold text-sm text-slate-700 mb-3">Daftar Modul Tersimpan (${appData.lessonPlans.length})</h3>
+                            <div class="space-y-2">
+                                ${appData.lessonPlans.map((m, idx) => `
+                                    <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl flex justify-between items-center">
+                                        <div>
+                                            <span class="font-bold text-sm text-slate-800">${m.title}</span>
+                                            <span class="ml-2 text-xs px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded">${m.className}</span>
+                                        </div>
+                                        <button onclick="appData.lessonPlans.splice(${idx},1); saveDataToCloud(); switchPerangkatTab('modul')" class="text-rose-600 text-xs font-semibold hover:underline">Hapus</button>
+                                    </div>
+                                `).join('') || '<p class="text-xs text-slate-400">Belum ada modul ajar tersimpan.</p>'}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } else if (tab === 'kisi') {
+                container.innerHTML = `
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+                        <h2 class="text-lg font-bold text-slate-900">Penyusunan Kisi-Kisi Instrumen Penilaian</h2>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <input type="text" id="kisiKd" placeholder="Capaian / Tujuan Pembelajaran" class="p-2.5 border border-slate-200 rounded-xl text-sm">
+                            <input type="text" id="kisiIndikator" placeholder="Indikator Soal" class="p-2.5 border border-slate-200 rounded-xl text-sm">
+                            <select id="kisiLevel" class="p-2.5 border border-slate-200 rounded-xl text-sm">
+                                <option value="L1 (C1-C2) Pemahaman">L1 (C1-C2) Pemahaman</option>
+                                <option value="L2 (C3) Penerapan">L2 (C3) Penerapan</option>
+                                <option value="L3 (C4-C6) Penalaran/HOTS">L3 (C4-C6) Penalaran/HOTS</option>
+                            </select>
+                        </div>
+                        <button onclick="addKisiItem()" class="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold shadow">
+                            + Tambah Baris Kisi-Kisi
+                        </button>
+                        <div class="overflow-x-auto pt-2">
+                            <table class="w-full text-left text-sm border-collapse">
+                                <thead class="bg-slate-100 text-slate-700">
+                                    <tr>
+                                        <th class="p-3 rounded-tl-xl">No</th>
+                                        <th class="p-3">Tujuan Pembelajaran</th>
+                                        <th class="p-3">Indikator Soal</th>
+                                        <th class="p-3">Level Kognitif</th>
+                                        <th class="p-3 rounded-tr-xl text-center">Aksi</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${appData.gridCards.map((k, i) => `
+                                        <tr class="border-b border-slate-100">
+                                            <td class="p-3">${i + 1}</td>
+                                            <td class="p-3">${k.kd}</td>
+                                            <td class="p-3">${k.indikator}</td>
+                                            <td class="p-3"><span class="px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded text-xs font-medium">${k.level}</span></td>
+                                            <td class="p-3 text-center"><button onclick="appData.gridCards.splice(${i},1); saveDataToCloud(); switchPerangkatTab('kisi')" class="text-rose-600 text-xs hover:underline">Hapus</button></td>
+                                        </tr>
+                                    `).join('') || '<tr><td colspan="5" class="p-4 text-center text-xs text-slate-400">Belum ada data kisi-kisi.</td></tr>'}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                `;
+            } else if (tab === 'soal') {
+                container.innerHTML = `
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+                        <div class="flex justify-between items-center flex-wrap gap-2">
+                            <div>
+                                <h2 class="text-lg font-bold text-slate-900">Bank Soal, Rubrik & Ekspor Google Forms</h2>
+                                <p class="text-xs text-slate-500">Tambah soal manual, impor dari file Excel/CSV/TXT, atau ekspor siap-pakai ke GForm.</p>
+                            </div>
+                            <div class="flex space-x-2">
+                                <label class="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold cursor-pointer shadow flex items-center">
+                                    <i class="fa-solid fa-file-arrow-up mr-1.5"></i> Add Soal dari File
+                                    <input type="file" accept=".xlsx,.xls,.csv,.txt" class="hidden" onchange="importQuestionsFromFile(event)">
+                                </label>
+                                <button onclick="exportQuestionsToGForm()" class="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold shadow flex items-center">
+                                    <i class="fa-brands fa-google-drive mr-1.5"></i> Ekspor ke GForm
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+                            <input type="text" id="qText" placeholder="Tulis Pertanyaan Soal..." class="w-full p-2.5 border border-slate-200 rounded-xl text-sm bg-white">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                <input type="text" id="qOptA" placeholder="Pilihan A" class="p-2 border border-slate-200 rounded-lg text-xs bg-white">
+                                <input type="text" id="qOptB" placeholder="Pilihan B" class="p-2 border border-slate-200 rounded-lg text-xs bg-white">
+                                <input type="text" id="qOptC" placeholder="Pilihan C" class="p-2 border border-slate-200 rounded-lg text-xs bg-white">
+                                <input type="text" id="qOptD" placeholder="Pilihan D" class="p-2 border border-slate-200 rounded-lg text-xs bg-white">
+                            </div>
+                            <div class="flex items-center space-x-3">
+                                <select id="qKey" class="p-2 border border-slate-200 rounded-lg text-xs bg-white font-semibold">
+                                    <option value="A">Kunci: A</option>
+                                    <option value="B">Kunci: B</option>
+                                    <option value="C">Kunci: C</option>
+                                    <option value="D">Kunci: D</option>
+                                </select>
+                                <input type="text" id="qRubric" placeholder="Rubrik / Pembahasan Singkat (Opsional)" class="flex-1 p-2 border border-slate-200 rounded-lg text-xs bg-white">
+                                <button onclick="addManualQuestion()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold">
+                                    + Tambah Soal
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="space-y-2">
+                            <h3 class="font-bold text-sm text-slate-700">Daftar Butir Soal (${appData.questionBanks.length})</h3>
+                            ${appData.questionBanks.map((q, idx) => `
+                                <div class="p-3 bg-white border border-slate-200 rounded-xl flex justify-between items-start gap-4">
+                                    <div class="text-xs space-y-1">
+                                        <p class="font-bold text-slate-900 text-sm">${idx + 1}. ${q.question}</p>
+                                        <p class="text-slate-600">A. ${q.a || '-'} | B. ${q.b || '-'} | C. ${q.c || '-'} | D. ${q.d || '-'}</p>
+                                        <p class="text-emerald-700 font-semibold">Kunci: ${q.key} <span class="text-slate-400 font-normal ml-2">${q.rubric ? '(' + q.rubric + ')' : ''}</span></p>
+                                    </div>
+                                    <button onclick="appData.questionBanks.splice(${idx},1); saveDataToCloud(); switchPerangkatTab('soal')" class="text-rose-600 text-xs font-semibold hover:underline">Hapus</button>
+                                </div>
+                            `).join('') || '<p class="text-xs text-slate-400">Belum ada butir soal. Tambahkan secara manual atau unggah file.</p>'}
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        function fillModulTemplate() {
+            document.getElementById('modulBody').value =
+`1. TUJUAN PEMBELAJARAN:
+Peserta didik mampu memahami dan menerapkan konsep materi secara mandiri serta kolaboratif.
+
+2. PEMAHAMAN BERMAKNA:
+Penerapan konsep ini bermanfaat langsung dalam memecahkan permasalahan kehidupan sehari-hari.
+
+3. KEGIATAN PEMBELAJARAN:
+- Pendahuluan (15 Menit): Salam, doa, presensi, apersepsi, dan penyampaian tujuan.
+- Kegiatan Inti (60 Menit): Eksplorasi konsep, diskusi kelompok, dan presentasi hasil karya.
+- Penutup (15 Menit): Refleksi, kesimpulan bersama, dan asesmen formatif singkat.
+
+4. BAHAN AJAR RINGKAS:
+[Tuliskan poin-poin inti materi di sini]`;
+        }
+
+        function saveModulItem() {
+            const title = document.getElementById('modulTitle').value.trim();
+            const className = document.getElementById('modulClass').value.trim() || 'Umum';
+            const body = document.getElementById('modulBody').value.trim();
+            if (!title) return alert("Harap isi Judul Modul terlebih dahulu.");
+            appData.lessonPlans.push({ id: Date.now(), title, className, body });
+            saveDataToCloud(true);
+            switchPerangkatTab('modul');
+        }
+
+        function addKisiItem() {
+            const kd = document.getElementById('kisiKd').value.trim();
+            const indikator = document.getElementById('kisiIndikator').value.trim();
+            const level = document.getElementById('kisiLevel').value;
+            if (!kd || !indikator) return alert("Isi Tujuan Pembelajaran dan Indikator Soal.");
+            appData.gridCards.push({ kd, indikator, level });
+            saveDataToCloud();
+            switchPerangkatTab('kisi');
+        }
+
+        function addManualQuestion() {
+            const question = document.getElementById('qText').value.trim();
+            if (!question) return alert("Tulis pertanyaan soal terlebih dahulu.");
+            appData.questionBanks.push({
+                question,
+                a: document.getElementById('qOptA').value.trim(),
+                b: document.getElementById('qOptB').value.trim(),
+                c: document.getElementById('qOptC').value.trim(),
+                d: document.getElementById('qOptD').value.trim(),
+                key: document.getElementById('qKey').value,
+                rubric: document.getElementById('qRubric').value.trim()
+            });
+            saveDataToCloud();
+            switchPerangkatTab('soal');
+        }
+
+        function importQuestionsFromFile(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+                const data = new Uint8Array(evt.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                const rows = XLSX.utils.sheet_to_json(sheet);
+                let added = 0;
+                rows.forEach(r => {
+                    const q = r.Soal || r.Pertanyaan || r.question;
+                    if (q) {
+                        appData.questionBanks.push({
+                            question: String(q),
+                            a: String(r.A || r.OpsiA || ''),
+                            b: String(r.B || r.OpsiB || ''),
+                            c: String(r.C || r.OpsiC || ''),
+                            d: String(r.D || r.OpsiD || ''),
+                            key: String(r.Kunci || r.Key || 'A').toUpperCase(),
+                            rubric: String(r.Rubrik || '')
+                        });
+                        added++;
+                    }
+                });
+                saveDataToCloud();
+                switchPerangkatTab('soal');
+                alert(`Berhasil mengimpor ${added} butir soal dari file!`);
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function exportQuestionsToGForm() {
+            if (appData.questionBanks.length === 0) return alert("Belum ada soal untuk diekspor!");
+            let textOut = "FORMAT EKSPOR GOOGLE FORMS (Salin & Tempel ke Google Forms / Form Builder)\n======================================================\n\n";
+            appData.questionBanks.forEach((q, idx) => {
+                textOut += `${idx + 1}. ${q.question}\n`;
+                if (q.a) textOut += `   A. ${q.a}\n`;
+                if (q.b) textOut += `   B. ${q.b}\n`;
+                if (q.c) textOut += `   C. ${q.c}\n`;
+                if (q.d) textOut += `   D. ${q.d}\n`;
+                textOut += `   [Kunci Jawaban: ${q.key}]\n\n`;
+            });
+            const blob = new Blob([textOut], { type: "text/plain;charset=utf-8" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "Ekspor_Soal_GForm.txt";
+            a.click();
+            alert("File format Google Forms (Ekspor_Soal_GForm.txt) berhasil diunduh!");
+        }
+
+        // ==================== 2. PORTAL JURNAL GURU ====================
+        function renderJurnalGuruApp() {
+            const app = document.getElementById('app');
+            app.innerHTML = `
+                <div class="max-w-6xl mx-auto w-full p-4 md:p-6 space-y-6">
+                    <div class="bg-[#181743] text-white p-5 rounded-2xl shadow-lg flex flex-wrap justify-between items-center gap-4">
+                        <div class="flex items-center space-x-4">
+                            <button onclick="renderPortalSelector()" class="px-3.5 py-2 bg-white/10 hover:bg-white/20 rounded-xl text-xs font-semibold flex items-center transition">
+                                <i class="fa-solid fa-arrow-left mr-2"></i> Menu Utama
+                            </button>
+                            <div>
+                                <span class="px-2 py-0.5 bg-emerald-500 text-slate-950 text-[10px] font-extrabold uppercase rounded tracking-wider">Jurnal Guru</span>
+                                <h1 class="font-bold text-lg md:text-xl mt-0.5">Mang Adit Assistant</h1>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <div id="liveClock" class="px-3 py-2 bg-indigo-950/80 border border-indigo-700/50 rounded-xl text-xs font-mono font-bold tracking-wider">00:00:00</div>
+                            <button onclick="enterPortal('perangkat')" class="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-xs font-semibold transition">
+                                Pindah Portal <i class="fa-solid fa-right-left ml-1"></i>
+                            </button>
+                            <button onclick="currentUser=null; renderAuth('login')" class="px-3.5 py-2 bg-rose-500 hover:bg-rose-600 rounded-xl text-xs font-semibold transition">
+                                Keluar
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <button onclick="switchJurnalTab('jadwal')" id="jTabJadwal" class="py-3 px-4 rounded-xl font-semibold text-sm transition flex items-center justify-center">
+                            <i class="fa-solid fa-calendar-days mr-2"></i> Jadwal & TTS
+                        </button>
+                        <button onclick="switchJurnalTab('siswa')" id="jTabSiswa" class="py-3 px-4 rounded-xl font-semibold text-sm transition flex items-center justify-center">
+                            <i class="fa-solid fa-users mr-2"></i> Data Siswa
+                        </button>
+                        <button onclick="switchJurnalTab('presensi')" id="jTabPresensi" class="py-3 px-4 rounded-xl font-semibold text-sm transition flex items-center justify-center">
+                            <i class="fa-solid fa-square-check mr-2"></i> Presensi
+                        </button>
+                        <button onclick="switchJurnalTab('nilai')" id="jTabNilai" class="py-3 px-4 rounded-xl font-semibold text-sm transition flex items-center justify-center">
+                            <i class="fa-solid fa-chart-column mr-2"></i> Rekap Nilai
+                        </button>
+                    </div>
+
+                    <div id="jurnalContent"></div>
+                </div>
+            `;
+            startLiveClock();
+            switchJurnalTab('jadwal');
+        }
+
+        function startLiveClock() {
+            const update = () => {
+                const el = document.getElementById('liveClock');
+                if (el) {
+                    const now = new Date();
+                    el.innerText = now.toTimeString().split(' ')[0];
+                }
+            };
+            update();
+            setInterval(update, 1000);
+        }
+
+        function switchJurnalTab(tab) {
+            ['Jadwal', 'Siswa', 'Presensi', 'Nilai'].forEach(t => {
+                const el = document.getElementById('jTab' + t);
+                if (el) {
+                    const isActive = t.toLowerCase() === tab.toLowerCase();
+                    el.className = isActive
+                        ? 'py-3 px-4 rounded-xl font-semibold text-sm shadow-md transition flex items-center justify-center bg-[#0d8a5e] text-white'
+                        : 'py-3 px-4 rounded-xl font-semibold text-sm shadow-sm transition flex items-center justify-center bg-white text-slate-700 hover:bg-slate-50 border border-slate-200';
+                }
+            });
+
+            const container = document.getElementById('jurnalContent');
+
+            if (tab === 'jadwal') {
+                container.innerHTML = `
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-6">
+                        <div class="p-4 bg-sky-50/70 border border-sky-100 rounded-2xl flex flex-wrap justify-between items-center gap-3">
+                            <div>
+                                <h3 class="font-bold text-slate-900 text-sm flex items-center">
+                                    <i class="fa-solid fa-volume-high text-sky-600 mr-2"></i> Pengingat Suara Jadwal Mengajar (TTS)
+                                </h3>
+                                <p class="text-xs text-slate-500 mt-0.5">Menyapa nama Anda otomatis saat jam mengajar tiba.</p>
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                <button onclick="testTTSVoice()" class="px-3.5 py-2 bg-white border border-slate-200 text-blue-600 hover:bg-blue-50 rounded-xl text-xs font-semibold shadow-sm">
+                                    <i class="fa-solid fa-play mr-1"></i> Uji Suara
+                                </button>
+                                <button onclick="toggleTTS()" id="ttsToggleBtn" class="px-3.5 py-2 ${ttsEnabled ? 'bg-emerald-600' : 'bg-slate-800'} text-white rounded-xl text-xs font-semibold shadow-sm">
+                                    Status: ${ttsEnabled ? 'Aktif' : 'Nonaktif'}
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Hari</label>
+                                <select id="schedDay" class="w-full p-2.5 border border-slate-200 rounded-xl text-sm bg-white">
+                                    <option value="Senin">Senin</option>
+                                    <option value="Selasa">Selasa</option>
+                                    <option value="Rabu">Rabu</option>
+                                    <option value="Kamis">Kamis</option>
+                                    <option value="Jumat">Jumat</option>
+                                    <option value="Sabtu">Sabtu</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Jam Mulai</label>
+                                <input type="time" id="schedStart" value="07:30" class="w-full p-2.5 border border-slate-200 rounded-xl text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Jam Selesai</label>
+                                <input type="time" id="schedEnd" value="09:00" class="w-full p-2.5 border border-slate-200 rounded-xl text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Kelas & Mapel</label>
+                                <input type="text" id="schedClass" placeholder="7A - Matematika" class="w-full p-2.5 border border-slate-200 rounded-xl text-sm">
+                            </div>
+                        </div>
+
+                        <button onclick="addScheduleItem()" class="w-full py-3 bg-[#0d8a5e] hover:bg-emerald-700 text-white rounded-xl text-sm font-semibold shadow transition">
+                            + Tambah Jadwal Mengajar
+                        </button>
+
+                        <div>
+                            <h3 class="font-bold text-slate-900 text-sm mb-3">Daftar Jadwal Mengajar</h3>
+                            <div class="space-y-2">
+                                ${appData.schedules.map((s, idx) => `
+                                    <div class="p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl flex justify-between items-center">
+                                        <div class="flex items-center space-x-3 text-sm">
+                                            <span class="px-2.5 py-1 bg-indigo-100 text-indigo-700 font-bold rounded-lg text-xs">${s.day}</span>
+                                            <span class="font-bold text-slate-800">${s.start} - ${s.end}</span>
+                                            <span class="text-slate-300">|</span>
+                                            <span class="text-slate-700 font-medium">${s.className}</span>
+                                        </div>
+                                        <button onclick="appData.schedules.splice(${idx},1); saveDataToCloud(); switchJurnalTab('jadwal')" class="text-rose-600 hover:underline text-xs font-semibold">Hapus</button>
+                                    </div>
+                                `).join('') || '<p class="text-xs text-slate-400">Belum ada jadwal mengajar ditambahkan.</p>'}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } else if (tab === 'siswa') {
+                container.innerHTML = `
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-6">
+                        <div class="flex flex-wrap justify-between items-center gap-3">
+                            <div>
+                                <h2 class="text-lg font-bold text-slate-900">Manajemen Data Siswa</h2>
+                                <p class="text-xs text-slate-500">Tambahkan siswa secara manual atau impor sekaligus dari file Excel (.xlsx / .csv).</p>
+                            </div>
+                            <div class="flex flex-wrap gap-2">
+                                <button onclick="toggleManualStudentForm()" class="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow flex items-center">
+                                    <i class="fa-solid fa-user-plus mr-1.5"></i> + Tambah Siswa Manual
+                                </button>
+                                <label class="px-4 py-2.5 bg-[#0d8a5e] hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold cursor-pointer shadow flex items-center">
+                                    <i class="fa-solid fa-file-excel mr-1.5"></i> Impor dari Excel (.xlsx/.csv)
+                                    <input type="file" accept=".xlsx,.xls,.csv" class="hidden" onchange="importStudentsFromExcel(event)">
+                                </label>
+                            </div>
+                        </div>
+
+                        <div id="manualStudentBox" class="hidden p-4 bg-indigo-50/70 border border-indigo-100 rounded-2xl space-y-3">
+                            <h3 class="text-xs font-bold uppercase text-indigo-800">Metode 1: Input Data Siswa Manual</h3>
+                            <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+                                <input type="text" id="stuName" placeholder="Nama Lengkap Siswa" class="md:col-span-2 p-2.5 border border-slate-200 rounded-xl text-sm bg-white">
+                                <input type="text" id="stuNis" placeholder="NIS / NISN" class="p-2.5 border border-slate-200 rounded-xl text-sm bg-white">
+                                <input type="text" id="stuClass" placeholder="Kelas (Contoh: 7A)" class="p-2.5 border border-slate-200 rounded-xl text-sm bg-white">
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-[11px] text-slate-500">*Untuk impor Excel, gunakan kolom header: <b>Nama</b> / <b>Nama Lengkap Siswa</b>, <b>NISN</b>, dan <b>Kelas</b>.</span>
+                                <button onclick="addManualStudent()" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow">
+                                    Simpan Siswa
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-sm border-collapse">
+                                <thead class="bg-slate-100 text-slate-700">
+                                    <tr>
+                                        <th class="p-3 rounded-tl-xl">No</th>
+                                        <th class="p-3">Nama Lengkap Siswa</th>
+                                        <th class="p-3">NIS / NISN</th>
+                                        <th class="p-3">Kelas</th>
+                                        <th class="p-3 rounded-tr-xl text-center">Aksi</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${appData.students.map((st, idx) => `
+                                        <tr class="border-b border-slate-100 hover:bg-slate-50/80">
+                                            <td class="p-3">${idx + 1}</td>
+                                            <td class="p-3 font-semibold text-slate-800">${st.name}</td>
+                                            <td class="p-3 text-slate-600">${st.nis || '-'}</td>
+                                            <td class="p-3"><span class="px-2.5 py-0.5 bg-emerald-50 text-emerald-700 font-semibold rounded-lg text-xs">${st.className}</span></td>
+                                            <td class="p-3 text-center">
+                                                <button onclick="deleteStudent('${st.id}')" class="text-rose-600 hover:underline text-xs font-semibold">Hapus</button>
+                                            </td>
+                                        </tr>
+                                    `).join('') || '<tr><td colspan="5" class="p-6 text-center text-xs text-slate-400">Belum ada data siswa. Silakan tambahkan secara manual atau impor dari file Excel.</td></tr>'}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                `;
+            } else if (tab === 'presensi') {
+                const today = new Date().toISOString().split('T')[0];
+                const selectedDate = document.getElementById('presensiDate')?.value || today;
+                const dailyAtt = appData.attendance[selectedDate] || {};
+
+                container.innerHTML = `
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-5">
+                        <div class="flex flex-wrap justify-between items-center gap-3">
+                            <div>
+                                <h2 class="text-lg font-bold text-slate-900">Presensi Kehadiran Siswa</h2>
+                                <p class="text-xs text-slate-500">Gunakan tombol "Hadir Semua" untuk mempercepat pengisian.</p>
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                <input type="date" id="presensiDate" value="${selectedDate}" onchange="switchJurnalTab('presensi')" class="p-2 border border-slate-200 rounded-xl text-xs font-semibold">
+                                <button onclick="markAllPresent('${selectedDate}')" class="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow flex items-center">
+                                    <i class="fa-solid fa-check-double mr-1.5"></i> Hadir Semua
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-sm border-collapse">
+                                <thead class="bg-slate-100 text-slate-700">
+                                    <tr>
+                                        <th class="p-3 rounded-tl-xl">No</th>
+                                        <th class="p-3">Nama Siswa</th>
+                                        <th class="p-3">Kelas</th>
+                                        <th class="p-3 rounded-tr-xl text-center">Keterangan Kehadiran</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${appData.students.map((st, idx) => {
+                                        const status = dailyAtt[st.id] || '';
+                                        return `
+                                        <tr class="border-b border-slate-100">
+                                            <td class="p-3">${idx + 1}</td>
+                                            <td class="p-3 font-semibold text-slate-800">${st.name}</td>
+                                            <td class="p-3 text-xs text-slate-500">${st.className}</td>
+                                            <td class="p-3">
+                                                <div class="flex justify-center space-x-2 sm:space-x-3">
+                                                    <label class="cursor-pointer px-2.5 py-1 rounded-lg border text-xs font-semibold flex items-center ${status === 'hadir' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-600 border-slate-200'}">
+                                                        <input type="radio" name="att_${st.id}" value="hadir" ${status === 'hadir' ? 'checked' : ''} onchange="setStudentAttendance('${selectedDate}', '${st.id}', 'hadir')" class="hidden"> H (Hadir)
+                                                    </label>
+                                                    <label class="cursor-pointer px-2.5 py-1 rounded-lg border text-xs font-semibold flex items-center ${status === 'sakit' ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-slate-600 border-slate-200'}">
+                                                        <input type="radio" name="att_${st.id}" value="sakit" ${status === 'sakit' ? 'checked' : ''} onchange="setStudentAttendance('${selectedDate}', '${st.id}', 'sakit')" class="hidden"> S (Sakit)
+                                                    </label>
+                                                    <label class="cursor-pointer px-2.5 py-1 rounded-lg border text-xs font-semibold flex items-center ${status === 'izin' ? 'bg-blue-500 text-white border-blue-500' : 'bg-white text-slate-600 border-slate-200'}">
+                                                        <input type="radio" name="att_${st.id}" value="izin" ${status === 'izin' ? 'checked' : ''} onchange="setStudentAttendance('${selectedDate}', '${st.id}', 'izin')" class="hidden"> I (Izin)
+                                                    </label>
+                                                    <label class="cursor-pointer px-2.5 py-1 rounded-lg border text-xs font-semibold flex items-center ${status === 'alpa' ? 'bg-rose-600 text-white border-rose-600' : 'bg-white text-slate-600 border-slate-200'}">
+                                                        <input type="radio" name="att_${st.id}" value="alpa" ${status === 'alpa' ? 'checked' : ''} onchange="setStudentAttendance('${selectedDate}', '${st.id}', 'alpa')" class="hidden"> A (Alpa)
+                                                    </label>
+                                                </div>
+                                            </td>
+                                        </tr>`;
+                                    }).join('') || '<tr><td colspan="4" class="p-6 text-center text-xs text-slate-400">Belum ada data siswa.</td></tr>'}
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="flex justify-end">
+                            <button onclick="saveDataToCloud(true)" class="px-5 py-2.5 bg-[#0d8a5e] hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold shadow">
+                                <i class="fa-solid fa-floppy-disk mr-1.5"></i> Simpan Presensi Hari Ini
+                            </button>
+                        </div>
+                    </div>
+                `;
+            } else if (tab === 'nilai') {
+                container.innerHTML = `
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-5">
+                        <div class="flex flex-wrap justify-between items-center gap-3">
+                            <div>
+                                <h2 class="text-lg font-bold text-slate-900">Kalkulator Rekap Nilai Akhir Otomatis</h2>
+                                <p class="text-xs text-slate-500">Nilai Akhir & Predikat dihitung otomatis secara real-time.</p>
+                            </div>
+                            <button onclick="saveDataToCloud(true)" class="px-4 py-2.5 bg-[#0d8a5e] hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold shadow">
+                                <i class="fa-solid fa-cloud-arrow-up mr-1.5"></i> Simpan Semua Nilai
+                            </button>
+                        </div>
+
+                        <div class="p-4 bg-slate-50 border border-slate-200 rounded-2xl grid grid-cols-2 md:grid-cols-5 gap-3 items-center">
+                            <div class="col-span-2 md:col-span-1">
+                                <span class="text-xs font-bold text-slate-700 block"><i class="fa-solid fa-calculator text-emerald-600 mr-1"></i> Bobot Nilai (%)</span>
+                            </div>
+                            <div>
+                                <label class="block text-[11px] font-semibold text-slate-600">Tugas (%)</label>
+                                <input type="number" id="wTugas" value="25" onchange="recalculateAllGrades()" class="w-full p-2 border border-slate-200 rounded-lg text-xs font-bold bg-white">
+                            </div>
+                            <div>
+                                <label class="block text-[11px] font-semibold text-slate-600">UH (%)</label>
+                                <input type="number" id="wUh" value="25" onchange="recalculateAllGrades()" class="w-full p-2 border border-slate-200 rounded-lg text-xs font-bold bg-white">
+                            </div>
+                            <div>
+                                <label class="block text-[11px] font-semibold text-slate-600">PTS (%)</label>
+                                <input type="number" id="wPts" value="25" onchange="recalculateAllGrades()" class="w-full p-2 border border-slate-200 rounded-lg text-xs font-bold bg-white">
+                            </div>
+                            <div>
+                                <label class="block text-[11px] font-semibold text-slate-600">PAS (%)</label>
+                                <input type="number" id="wPas" value="25" onchange="recalculateAllGrades()" class="w-full p-2 border border-slate-200 rounded-lg text-xs font-bold bg-white">
+                            </div>
+                        </div>
+
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-sm border-collapse">
+                                <thead class="bg-slate-100 text-slate-700">
+                                    <tr>
+                                        <th class="p-3 rounded-tl-xl">Nama Siswa</th>
+                                        <th class="p-3 text-center w-24">Tugas</th>
+                                        <th class="p-3 text-center w-24">UH</th>
+                                        <th class="p-3 text-center w-24">PTS</th>
+                                        <th class="p-3 text-center w-24">PAS</th>
+                                        <th class="p-3 text-center">Nilai Akhir</th>
+                                        <th class="p-3 rounded-tr-xl text-center">Predikat</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${appData.students.map((st) => {
+                                        const g = appData.grades[st.id] || { tugas: 0, uh: 0, pts: 0, pas: 0, finalScore: 0, predicate: 'D' };
+                                        return `
+                                        <tr class="border-b border-slate-100">
+                                            <td class="p-3 font-semibold text-slate-800">${st.name} <span class="text-xs text-slate-400 font-normal">(${st.className})</span></td>
+                                            <td class="p-2 text-center"><input type="number" min="0" max="100" value="${g.tugas}" oninput="updateStudentGrade('${st.id}', 'tugas', this.value)" class="w-16 p-1.5 border border-slate-200 rounded-lg text-center text-xs font-semibold"></td>
+                                            <td class="p-2 text-center"><input type="number" min="0" max="100" value="${g.uh}" oninput="updateStudentGrade('${st.id}', 'uh', this.value)" class="w-16 p-1.5 border border-slate-200 rounded-lg text-center text-xs font-semibold"></td>
+                                            <td class="p-2 text-center"><input type="number" min="0" max="100" value="${g.pts}" oninput="updateStudentGrade('${st.id}', 'pts', this.value)" class="w-16 p-1.5 border border-slate-200 rounded-lg text-center text-xs font-semibold"></td>
+                                            <td class="p-2 text-center"><input type="number" min="0" max="100" value="${g.pas}" oninput="updateStudentGrade('${st.id}', 'pas', this.value)" class="w-16 p-1.5 border border-slate-200 rounded-lg text-center text-xs font-semibold"></td>
+                                            <td class="p-3 text-center font-extrabold text-indigo-700" id="final_${st.id}">${g.finalScore}</td>
+                                            <td class="p-3 text-center" id="pred_${st.id}">
+                                                <span class="px-2.5 py-0.5 rounded-lg text-xs font-bold ${getPredicateBadge(g.predicate)}">${g.predicate}</span>
+                                            </td>
+                                        </tr>`;
+                                    }).join('') || '<tr><td colspan="7" class="p-6 text-center text-xs text-slate-400">Belum ada data siswa.</td></tr>'}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        function testTTSVoice() {
+            const msg = new SpeechSynthesisUtterance(`Halo Bapak atau Ibu ${currentUserName}, saatnya memasuki jam mengajar. Selamat bertugas.`);
+            msg.lang = 'id-ID';
+            window.speechSynthesis.speak(msg);
+        }
+
+        function toggleTTS() {
+            ttsEnabled = !ttsEnabled;
+            const btn = document.getElementById('ttsToggleBtn');
+            if (btn) {
+                btn.innerText = `Status: ${ttsEnabled ? 'Aktif' : 'Nonaktif'}`;
+                btn.className = `px-3.5 py-2 ${ttsEnabled ? 'bg-emerald-600' : 'bg-slate-800'} text-white rounded-xl text-xs font-semibold shadow-sm`;
+            }
+            if (ttsEnabled) {
+                testTTSVoice();
+                ttsInterval = setInterval(() => {
+                    const now = new Date();
+                    const days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+                    const currentDay = days[now.getDay()];
+                    const currentTime = now.toTimeString().slice(0, 5);
+                    appData.schedules.forEach(s => {
+                        if (s.day === currentDay && s.start === currentTime && now.getSeconds() === 0) {
+                            const alertMsg = new SpeechSynthesisUtterance(`Perhatian ${currentUserName}, jadwal mengajar kelas ${s.className} dimulai sekarang.`);
+                            alertMsg.lang = 'id-ID';
+                            window.speechSynthesis.speak(alertMsg);
+                        }
+                    });
+                }, 1000);
+            } else {
+                clearInterval(ttsInterval);
+            }
+        }
+
+        function addScheduleItem() {
+            const day = document.getElementById('schedDay').value;
+            const start = document.getElementById('schedStart').value;
+            const end = document.getElementById('schedEnd').value;
+            const className = document.getElementById('schedClass').value.trim();
+            if (!className) return alert("Isi Kelas & Mata Pelajaran terlebih dahulu.");
+            appData.schedules.push({ day, start, end, className });
+            saveDataToCloud();
+            switchJurnalTab('jadwal');
+        }
+
+        function toggleManualStudentForm() {
+            const box = document.getElementById('manualStudentBox');
+            if (box) box.classList.toggle('hidden');
+        }
+
+        function addManualStudent() {
+            const name = document.getElementById('stuName').value.trim();
+            const nis = document.getElementById('stuNis').value.trim();
+            const className = document.getElementById('stuClass').value.trim() || 'Umum';
+            if (!name) return alert("Nama siswa wajib diisi.");
+            appData.students.push({
+                id: 'stu_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+                name,
+                nis,
+                className
+            });
+            saveDataToCloud();
+            switchJurnalTab('siswa');
+        }
+
+        function importStudentsFromExcel(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+                const data = new Uint8Array(evt.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                const rows = XLSX.utils.sheet_to_json(sheet);
+                let count = 0;
+                rows.forEach((r, idx) => {
+                    const name = r.Nama || r['Nama Lengkap Siswa'] || r['Nama Lengkap'] || r.Name || r.nama;
+                    if (name) {
+                        appData.students.push({
+                            id: 'stu_' + Date.now() + '_' + idx,
+                            name: String(name).trim(),
+                            nis: String(r.NISN || r.NIS || r.nis || '').trim(),
+                            className: String(r.Kelas || r.Class || r.kelas || 'Umum').trim()
+                        });
+                        count++;
+                    }
+                });
+                saveDataToCloud();
+                switchJurnalTab('siswa');
+                alert(`Berhasil mengimpor ${count} data siswa dari file Excel/CSV!`);
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function deleteStudent(id) {
+            appData.students = appData.students.filter(s => s.id !== id);
+            delete appData.grades[id];
+            saveDataToCloud();
+            switchJurnalTab('siswa');
+        }
+
+        function setStudentAttendance(date, studentId, status) {
+            if (!appData.attendance[date]) appData.attendance[date] = {};
+            appData.attendance[date][studentId] = status;
+            switchJurnalTab('presensi');
+        }
+
+        function markAllPresent(date) {
+            if (appData.students.length === 0) return alert("Belum ada data siswa.");
+            if (!appData.attendance[date]) appData.attendance[date] = {};
+            appData.students.forEach(st => {
+                appData.attendance[date][st.id] = 'hadir';
+            });
+            switchJurnalTab('presensi');
+        }
+
+        function getPredicate(score) {
+            if (score >= 90) return 'A (Sangat Baik)';
+            if (score >= 80) return 'B (Baik)';
+            if (score >= 70) return 'C (Cukup)';
+            return 'D (Perlu Bimbingan)';
+        }
+
+        function getPredicateBadge(pred) {
+            if (pred.startsWith('A')) return 'bg-emerald-100 text-emerald-800';
+            if (pred.startsWith('B')) return 'bg-blue-100 text-blue-800';
+            if (pred.startsWith('C')) return 'bg-amber-100 text-amber-800';
+            return 'bg-rose-100 text-rose-800';
+        }
+
+        function updateStudentGrade(studentId, field, value) {
+            if (!appData.grades[studentId]) {
+                appData.grades[studentId] = { tugas: 0, uh: 0, pts: 0, pas: 0, finalScore: 0, predicate: 'D (Perlu Bimbingan)' };
+            }
+            appData.grades[studentId][field] = parseFloat(value) || 0;
+            computeSingleStudentGrade(studentId);
+        }
+
+        function computeSingleStudentGrade(studentId) {
+            const wTugas = (parseFloat(document.getElementById('wTugas')?.value) || 0) / 100;
+            const wUh = (parseFloat(document.getElementById('wUh')?.value) || 0) / 100;
+            const wPts = (parseFloat(document.getElementById('wPts')?.value) || 0) / 100;
+            const wPas = (parseFloat(document.getElementById('wPas')?.value) || 0) / 100;
+
+            const g = appData.grades[studentId];
+            const finalScore = ((g.tugas * wTugas) + (g.uh * wUh) + (g.pts * wPts) + (g.pas * wPas)).toFixed(1);
+            const predicate = getPredicate(parseFloat(finalScore));
+
+            g.finalScore = finalScore;
+            g.predicate = predicate;
+
+            const finalEl = document.getElementById(`final_${studentId}`);
+            const predEl = document.getElementById(`pred_${studentId}`);
+            if (finalEl) finalEl.innerText = finalScore;
+            if (predEl) predEl.innerHTML = `<span class="px-2.5 py-0.5 rounded-lg text-xs font-bold ${getPredicateBadge(predicate)}">${predicate}</span>`;
+        }
+
+        function recalculateAllGrades() {
+            appData.students.forEach(st => {
+                if (appData.grades[st.id]) {
+                    computeSingleStudentGrade(st.id);
+                }
+            });
+        }
+
+        renderAuth('login');
+    </script>
+</body>
+</html>
