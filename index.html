@@ -783,7 +783,7 @@ Penerapan konsep ini bermanfaat langsung dalam memecahkan permasalahan kehidupan
                                     <i class="fa-solid fa-user-plus mr-1.5"></i> + Tambah Siswa Manual
                                 </button>
                                 <label class="px-4 py-2.5 bg-[#0d8a5e] hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold cursor-pointer shadow flex items-center">
-                                    <i class="fa-solid fa-file-excel mr-1.5"></i> Impor dari Excel (.xlsx/.csv)
+                                    <i class="fa-solid fa-file-excel mr-1.5"></i> Impor dari Excel Sekolah (.xlsx/.csv)
                                     <input type="file" accept=".xlsx,.xls,.csv" class="hidden" onchange="importStudentsFromExcel(event)">
                                 </label>
                             </div>
@@ -797,7 +797,7 @@ Penerapan konsep ini bermanfaat langsung dalam memecahkan permasalahan kehidupan
                                 <input type="text" id="stuClass" placeholder="Kelas (Contoh: 7A)" class="p-2.5 border border-slate-200 rounded-xl text-sm bg-white">
                             </div>
                             <div class="flex justify-between items-center">
-                                <span class="text-[11px] text-slate-500">*Untuk impor Excel, gunakan kolom header: <b>Nama</b> / <b>Nama Lengkap Siswa</b>, <b>NISN</b>, dan <b>Kelas</b>.</span>
+                                <span class="text-[11px] text-slate-500">*Impor Excel otomatis mendeteksi format apa pun dari sekolah secara cerdas.</span>
                                 <button onclick="addManualStudent()" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow">
                                     Simpan Siswa
                                 </button>
@@ -826,7 +826,7 @@ Penerapan konsep ini bermanfaat langsung dalam memecahkan permasalahan kehidupan
                                                 <button onclick="deleteStudent('${st.id}')" class="text-rose-600 hover:underline text-xs font-semibold">Hapus</button>
                                             </td>
                                         </tr>
-                                    `).join('') || '<tr><td colspan="5" class="p-6 text-center text-xs text-slate-400">Belum ada data siswa. Silakan tambahkan secara manual atau impor dari file Excel.</td></tr>'}
+                                    `).join('') || '<tr><td colspan="5" class="p-6 text-center text-xs text-slate-400">Belum ada data siswa. Silakan tambahkan secara manual atau impor dari file Excel sekolah.</td></tr>'}
                                 </tbody>
                             </table>
                         </div>
@@ -1041,24 +1041,43 @@ Penerapan konsep ini bermanfaat langsung dalam memecahkan permasalahan kehidupan
             reader.onload = function(evt) {
                 const data = new Uint8Array(evt.target.result);
                 const workbook = XLSX.read(data, { type: 'array' });
-                const sheet = workbook.Sheets[workbook.SheetNames[0]];
-                const rows = XLSX.utils.sheet_to_json(sheet);
+                
+                let allRows = [];
+                workbook.SheetNames.forEach(sheetName => {
+                    const sheet = workbook.Sheets[sheetName];
+                    const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+                    allRows = allRows.concat(rows);
+                });
+
                 let count = 0;
-                rows.forEach((r, idx) => {
-                    const name = r.Nama || r['Nama Lengkap Siswa'] || r['Nama Lengkap'] || r.Name || r.nama;
-                    if (name) {
+                allRows.forEach((r, idx) => {
+                    const rowLower = {};
+                    Object.keys(r).forEach(k => {
+                        rowLower[k.toLowerCase().trim()] = r[k];
+                    });
+
+                    const name = rowLower['nama'] || rowLower['nama lengkap'] || rowLower['nama siswa'] || rowLower['student name'] || rowLower['nama peserta didik'];
+                    const nis = rowLower['nisn'] || rowLower['nis'] || rowLower['no induk'] || rowLower['nomor induk'];
+                    const className = rowLower['kelas'] || rowLower['rombel'] || rowLower['rombongan belajar'] || rowLower['class'] || 'Umum';
+
+                    if (name && String(name).trim() !== "" && !String(name).toLowerCase().includes('data master') && !String(name).toLowerCase().includes('daftar siswa')) {
                         appData.students.push({
                             id: 'stu_' + Date.now() + '_' + idx,
                             name: String(name).trim(),
-                            nis: String(r.NISN || r.NIS || r.nis || '').trim(),
-                            className: String(r.Kelas || r.Class || r.kelas || 'Umum').trim()
+                            nis: String(nis || '').trim(),
+                            className: String(className).trim()
                         });
                         count++;
                     }
                 });
-                saveDataToCloud();
-                switchJurnalTab('siswa');
-                alert(`Berhasil mengimpor ${count} data siswa dari file Excel/CSV!`);
+
+                if (count > 0) {
+                    saveDataToCloud();
+                    switchJurnalTab('siswa');
+                    alert(`Berhasil mengimpor ${count} data siswa secara otomatis dari file Excel sekolah!`);
+                } else {
+                    alert("Gagal mendeteksi kolom nama siswa. Pastikan file Excel memiliki header seperti 'Nama', 'NISN', atau 'Kelas'.");
+                }
             };
             reader.readAsArrayBuffer(file);
         }
