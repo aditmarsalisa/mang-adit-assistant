@@ -836,11 +836,11 @@ Penerapan konsep ini bermanfaat langsung dalam memecahkan permasalahan kehidupan
                 const today = new Date().toISOString().split('T')[0];
                 const selectedDate = document.getElementById('presensiDate')?.value || today;
                 
-                // Ambil daftar kelas unik dari data siswa
+                // Ambil daftar kelas unik dari data siswa, urutkan
                 const classList = [...new Set(appData.students.map(s => s.className))].sort();
                 const selectedClass = document.getElementById('presensiClassFilter')?.value || (classList.length > 0 ? classList[0] : '');
 
-                // Filter siswa berdasarkan kelas yang dipilih
+                // Saring ketat siswa HANYA yang kelasnya sama persis dengan yang dipilih di dropdown
                 const filteredStudents = appData.students.filter(st => st.className === selectedClass);
                 const dailyAtt = appData.attendance[selectedDate] || {};
 
@@ -849,7 +849,7 @@ Penerapan konsep ini bermanfaat langsung dalam memecahkan permasalahan kehidupan
                         <div class="flex flex-wrap justify-between items-center gap-3">
                             <div>
                                 <h2 class="text-lg font-bold text-slate-900">Presensi Kehadiran Siswa</h2>
-                                <p class="text-xs text-slate-500">Pilih kelas dan tanggal presensi sesuai jadwal mengajar Anda.</p>
+                                <p class="text-xs text-slate-500">Pilih kelas di dropdown untuk menampilkan siswa pada kelas tersebut saja.</p>
                             </div>
                             <div class="flex flex-wrap items-center gap-2">
                                 <select id="presensiClassFilter" onchange="switchJurnalTab('presensi')" class="p-2 border border-slate-200 rounded-xl text-xs font-bold bg-white text-indigo-700">
@@ -1045,7 +1045,7 @@ Penerapan konsep ini bermanfaat langsung dalam memecahkan permasalahan kehidupan
             switchJurnalTab('siswa');
         }
 
-        // ==================== UNIVERSAL SMART EXCEL IMPORT ====================
+        // ==================== UNIVERSAL SMART EXCEL IMPORT (FILTERED) ====================
         function importStudentsFromExcel(e) {
             const file = e.target.files[0];
             if (!file) return;
@@ -1104,11 +1104,19 @@ Penerapan konsep ini bermanfaat langsung dalam memecahkan permasalahan kehidupan
                             if (rawName !== undefined && rawName !== null) {
                                 const nameStr = String(rawName).trim();
                                 
-                                if (nameStr !== "" && isNaN(nameStr) && 
-                                    !nameStr.toLowerCase().includes('presensi') && 
-                                    !nameStr.toLowerCase().includes('data master') && 
-                                    !['nama', 'nama lengkap', 'no.', 'no', 'nama siswa'].includes(nameStr.toLowerCase())) {
-                                    
+                                // Filter ketat: pastikan baris adalah nama siswa valid (bukan materi, bukan tanggal, bukan judul)
+                                const lowerName = nameStr.toLowerCase();
+                                const isInvalidText = lowerName.includes('presensi') || 
+                                                      lowerName.includes('data master') || 
+                                                      lowerName.includes('bahas') || 
+                                                      lowerName.includes('neruske') || 
+                                                      lowerName.includes('kosong') || 
+                                                      lowerName.includes('diskusi') || 
+                                                      lowerName.includes('tgs') || 
+                                                      lowerName.includes('kelompok') ||
+                                                      ['nama', 'nama lengkap', 'no.', 'no', 'nama siswa'].includes(lowerName);
+
+                                if (nameStr !== "" && isNaN(nameStr) && !isInvalidText) {
                                     const nis = nisColIdx !== -1 && nisColIdx < row.length ? String(row[nisColIdx]).trim() : '';
                                     
                                     let className = classColIdx !== -1 && classColIdx < row.length && String(row[classColIdx]).trim() !== "" ? String(row[classColIdx]).trim() : sheetName;
@@ -1129,10 +1137,10 @@ Penerapan konsep ini bermanfaat langsung dalam memecahkan permasalahan kehidupan
                 });
 
                 if (importedStudents.length > 0) {
-                    appData.students = appData.students.concat(importedStudents);
+                    appData.students = importedStudents; // Reset dan timpa dengan data yang bersih
                     saveDataToCloud();
                     switchJurnalTab('siswa');
-                    alert(`Berhasil mengimpor ${importedStudents.length} data siswa secara otomatis dari file sekolah!`);
+                    alert(`Berhasil mengimpor ${importedStudents.length} data siswa bersih secara otomatis dari file sekolah!`);
                 } else {
                     alert("Gagal mendeteksi nama siswa. Pastikan file Excel memuat kolom nama siswa.");
                 }
