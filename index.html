@@ -1167,7 +1167,11 @@ Penerapan konsep ini bermanfaat langsung dalam memecahkan permasalahan kehidupan
         function setStudentAttendanceDirect(date, studentId, status) {
             if (!appData.attendance[date]) appData.attendance[date] = {};
             appData.attendance[date][studentId] = status;
-            // Refresh halaman presensi secara instan tanpa kehilangan tanggal/kelas yang dipilih
+            
+            // Auto-save secara otomatis ke cloud agar tidak hilang saat logout
+            saveDataToCloud(false); 
+            
+            // Refresh halaman presensi secara instan
             switchJurnalTab('presensi');
         }
 
@@ -1178,8 +1182,10 @@ Penerapan konsep ini bermanfaat langsung dalam memecahkan permasalahan kehidupan
             classStudents.forEach(st => {
                 appData.attendance[date][st.id] = 'hadir';
             });
+            
+            // Simpan otomatis ke cloud
+            saveDataToCloud(true);
             switchJurnalTab('presensi');
-            alert(`Semua siswa kelas ${className} ditandai Hadir untuk hari ini!`);
         }
 
         function getPredicate(score) {
