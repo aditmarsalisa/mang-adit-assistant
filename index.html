@@ -165,9 +165,19 @@
                 if (data.status === 'success') {
                     currentUser = email;
                     currentUserName = data.name || email.split('@')[0];
-                    if (data.appData) {
+                    
+                    // Prioritaskan LocalStorage HP agar data aman dan tidak tertimpa server kosong
+                    const localSaved = localStorage.getItem('mang_adit_data_' + email);
+                    if (localSaved) {
+                        try {
+                            appData = JSON.parse(localSaved);
+                        } catch (e) {
+                            if (data.appData) appData = { ...appData, ...data.appData };
+                        }
+                    } else if (data.appData) {
                         appData = { ...appData, ...data.appData };
                     }
+
                     renderPortalSelector();
                 } else {
                     alert(data.message);
@@ -175,9 +185,18 @@
                     btn.disabled = false;
                 }
             } catch (err) {
-                alert("Koneksi gagal: " + err.message);
-                btn.innerText = "Masuk ke Aplikasi";
-                btn.disabled = false;
+                // Mode offline / cadangan LocalStorage jika server cloud terputus
+                currentUser = email;
+                currentUserName = email.split('@')[0];
+                const localSaved = localStorage.getItem('mang_adit_data_' + email);
+                if (localSaved) {
+                    appData = JSON.parse(localSaved);
+                    renderPortalSelector();
+                } else {
+                    alert("Koneksi server gagal dan belum ada data tersimpan di HP: " + err.message);
+                    btn.innerText = "Masuk ke Aplikasi";
+                    btn.disabled = false;
+                }
             }
         }
 
@@ -268,16 +287,22 @@
         }
 
         async function saveDataToCloud(showToast = false) {
+            if (currentUser) {
+                // Simpan instan ke memori HP (LocalStorage) agar aman dari logout/refresh
+                localStorage.setItem('mang_adit_data_' + currentUser, JSON.stringify(appData));
+            }
+
             if (!currentUser) return;
+
             try {
                 await fetch(SCRIPT_URL, {
                     method: 'POST',
                     body: JSON.stringify({ action: 'save_data', email: currentUser, appData })
                 });
-                if (showToast) alert("Data berhasil disimpan & disinkronkan ke Google Drive!");
+                if (showToast) alert("Data berhasil disimpan & disinkronkan ke server cloud!");
             } catch (err) {
-                console.error("Gagal sinkronisasi:", err);
-                if (showToast) alert("Gagal menyinkronkan ke server: " + err.message);
+                console.error("Gagal sinkronisasi cloud:", err);
+                if (showToast) alert("Disimpan aman di memori HP (Offline Mode).");
             }
         }
 
@@ -854,7 +879,7 @@ Penerapan konsep ini bermanfaat langsung dalam memecahkan permasalahan kehidupan
                         <div class="flex flex-wrap justify-between items-center gap-3">
                             <div>
                                 <h2 class="text-lg font-bold text-slate-900">Presensi Kehadiran Siswa</h2>
-                                <p class="text-xs text-slate-500">Ketuk langsung tombol H, S, I, atau A untuk mencatat kehadiran siswa.</p>
+                                <p class="text-xs text-slate-500">Ketuk tombol H, S, I, atau A. Data langsung tersimpan permanen otomatis.</p>
                             </div>
                             <div class="flex flex-wrap items-center gap-2">
                                 <select id="presensiClassFilter" onchange="switchJurnalTab('presensi')" class="p-2 border border-slate-200 rounded-xl text-xs font-bold bg-white text-indigo-700 shadow-sm">
@@ -868,7 +893,7 @@ Penerapan konsep ini bermanfaat langsung dalam memecahkan permasalahan kehidupan
                             </div>
                         </div>
 
-                        <!-- TABEL PRESENSI DENGAN TOMBOL KLIK LANGSUNG (DIJAMIN RESPONSIF DI HP) -->
+                        <!-- TABEL PRESENSI DENGAN TOMBOL KLIK LANGSUNG -->
                         <div class="overflow-x-auto">
                             <table class="w-full text-left text-sm border-collapse min-w-[500px]">
                                 <thead class="bg-slate-100 text-slate-700">
@@ -1168,10 +1193,10 @@ Penerapan konsep ini bermanfaat langsung dalam memecahkan permasalahan kehidupan
             if (!appData.attendance[date]) appData.attendance[date] = {};
             appData.attendance[date][studentId] = status;
             
-            // Auto-save secara otomatis ke cloud agar tidak hilang saat logout
-            saveDataToCloud(false); 
+            // Simpan otomatis ke Cloud dan memori HP secara instan
+            saveDataToCloud(false);
             
-            // Refresh halaman presensi secara instan
+            // Refresh halaman presensi instan
             switchJurnalTab('presensi');
         }
 
@@ -1183,7 +1208,7 @@ Penerapan konsep ini bermanfaat langsung dalam memecahkan permasalahan kehidupan
                 appData.attendance[date][st.id] = 'hadir';
             });
             
-            // Simpan otomatis ke cloud
+            // Simpan permanen otomatis
             saveDataToCloud(true);
             switchJurnalTab('presensi');
         }
