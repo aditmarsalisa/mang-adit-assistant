@@ -8,7 +8,7 @@
     <link rel="icon" type="image/png" href="https://i.postimg.cc/3w636402/logo.png">
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- Library SheetJS untuk membaca file Excel (.xlsx, .xls, .csv) -->
+    <!-- Library SheetJS untuk membaca & menulis file Excel (.xlsx, .xls, .csv) -->
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
 </head>
 <body class="bg-slate-50 text-slate-800 font-sans antialiased min-h-screen flex flex-col">
@@ -743,6 +743,63 @@ Penerapan konsep ini bermanfaat langsung dalam memecahkan permasalahan kehidupan
             setInterval(update, 1000);
         }
 
+        function getAttendanceRecapForClass(className) {
+            const classStudents = appData.students.filter(st => st.className === className);
+            const allDates = Object.keys(appData.attendance || {}).sort();
+            const activeDates = allDates.filter(d => {
+                const dayMap = appData.attendance[d] || {};
+                return classStudents.some(st => Boolean(dayMap[st.id]));
+            });
+
+            const rows = classStudents.map(st => {
+                let h = 0, s = 0, i = 0, a = 0;
+                activeDates.forEach(d => {
+                    const status = (appData.attendance[d] || {})[st.id];
+                    if (status === 'hadir') h++;
+                    else if (status === 'sakit') s++;
+                    else if (status === 'izin') i++;
+                    else if (status === 'alpa') a++;
+                });
+                const totalRecorded = h + s + i + a;
+                const persentaseHadir = totalRecorded > 0 ? ((h / totalRecorded) * 100).toFixed(0) : '0';
+                return {
+                    id: st.id,
+                    name: st.name,
+                    nis: st.nis || '-',
+                    className: st.className,
+                    h, s, i, a,
+                    totalRecorded,
+                    persentaseHadir
+                };
+            });
+
+            return { rows, activeDates };
+        }
+
+        function exportAttendanceRecapExcel(className) {
+            const { rows, activeDates } = getAttendanceRecapForClass(className);
+            if (!className || rows.length === 0) {
+                return alert("Tidak ada data rekap presensi untuk diekspor.");
+            }
+            const exportRows = rows.map((r, idx) => ({
+                No: idx + 1,
+                Nama_Siswa: r.name,
+                NIS: r.nis,
+                Kelas: r.className,
+                Hadir: r.h,
+                Sakit: r.s,
+                Izin: r.i,
+                Alpa: r.a,
+                Total_Pertemuan_Tercatat: r.totalRecorded,
+                Persentase_Hadir: r.persentaseHadir + '%',
+                Tanggal_Tercatat: activeDates.join(', ')
+            }));
+            const ws = XLSX.utils.json_to_sheet(exportRows);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, `Rekap_${className}`);
+            XLSX.writeFile(wb, `Rekap_Presensi_${className}.xlsx`);
+        }
+
         function switchJurnalTab(tab) {
             ['Jadwal', 'Siswa', 'Presensi', 'Nilai'].forEach(t => {
                 const el = document.getElementById('jTab' + t);
@@ -902,61 +959,114 @@ Penerapan konsep ini bermanfaat langsung dalam memecahkan permasalahan kehidupan
 
                 const filteredStudents = appData.students.filter(st => st.className === selectedClass);
                 const dailyAtt = appData.attendance[selectedDate] || {};
+                const recap = getAttendanceRecapForClass(selectedClass);
 
                 container.innerHTML = `
-                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-5">
-                        <div class="flex flex-wrap justify-between items-center gap-3">
-                            <div>
-                                <h2 class="text-lg font-bold text-slate-900">Presensi Kehadiran Siswa</h2>
-                                <p class="text-xs text-slate-500">Ketuk tombol H, S, I, atau A. Data langsung tersimpan permanen otomatis.</p>
+                    <div class="space-y-6">
+                        <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-5">
+                            <div class="flex flex-wrap justify-between items-center gap-3">
+                                <div>
+                                    <h2 class="text-lg font-bold text-slate-900">Presensi Kehadiran Siswa</h2>
+                                    <p class="text-xs text-slate-500">Ketuk tombol H, S, I, atau A. Data langsung tersimpan permanen otomatis.</p>
+                                </div>
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <select id="presensiClassFilter" onchange="switchJurnalTab('presensi')" class="p-2 border border-slate-200 rounded-xl text-xs font-bold bg-white text-indigo-700 shadow-sm">
+                                        ${classList.map(cls => `<option value="${cls}" ${cls === selectedClass ? 'selected' : ''}>Kelas: ${cls}</option>`).join('')}
+                                        ${classList.length === 0 ? '<option value="">Belum ada kelas</option>' : ''}
+                                    </select>
+                                    <input type="date" id="presensiDate" value="${selectedDate}" onchange="switchJurnalTab('presensi')" class="p-2 border border-slate-200 rounded-xl text-xs font-semibold">
+                                    <button onclick="markAllPresentForClass('${selectedDate}', '${selectedClass}')" class="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow flex items-center">
+                                        <i class="fa-solid fa-check-double mr-1.5"></i> Hadir Semua (${selectedClass || '-'})
+                                    </button>
+                                </div>
                             </div>
-                            <div class="flex flex-wrap items-center gap-2">
-                                <select id="presensiClassFilter" onchange="switchJurnalTab('presensi')" class="p-2 border border-slate-200 rounded-xl text-xs font-bold bg-white text-indigo-700 shadow-sm">
-                                    ${classList.map(cls => `<option value="${cls}" ${cls === selectedClass ? 'selected' : ''}>Kelas: ${cls}</option>`).join('')}
-                                    ${classList.length === 0 ? '<option value="">Belum ada kelas</option>' : ''}
-                                </select>
-                                <input type="date" id="presensiDate" value="${selectedDate}" onchange="switchJurnalTab('presensi')" class="p-2 border border-slate-200 rounded-xl text-xs font-semibold">
-                                <button onclick="markAllPresentForClass('${selectedDate}', '${selectedClass}')" class="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow flex items-center">
-                                    <i class="fa-solid fa-check-double mr-1.5"></i> Hadir Semua (${selectedClass || '-'})
+
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-left text-sm border-collapse min-w-[500px]">
+                                    <thead class="bg-slate-100 text-slate-700">
+                                        <tr>
+                                            <th class="p-3 rounded-tl-xl w-14">No</th>
+                                            <th class="p-3">Nama Siswa</th>
+                                            <th class="p-3 w-20">Kelas</th>
+                                            <th class="p-3 rounded-tr-xl text-center w-80">Keterangan Kehadiran</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${filteredStudents.map((st, idx) => {
+                                            const status = dailyAtt[st.id] || '';
+                                            return `
+                                            <tr class="border-b border-slate-100 hover:bg-slate-50">
+                                                <td class="p-3">${idx + 1}</td>
+                                                <td class="p-3 font-semibold text-slate-800">${st.name} <span class="text-xs font-normal text-slate-400">(${st.nis || '-'})</span></td>
+                                                <td class="p-3 text-xs font-medium text-emerald-700">${st.className}</td>
+                                                <td class="p-3">
+                                                    <div class="grid grid-cols-4 gap-1">
+                                                        <button onclick="setStudentAttendanceDirect('${selectedDate}', '${st.id}', 'hadir')" class="py-1.5 px-2 rounded-lg border text-xs font-bold transition ${status === 'hadir' ? 'bg-emerald-600 text-white border-emerald-600 shadow' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'}">H</button>
+                                                        <button onclick="setStudentAttendanceDirect('${selectedDate}', '${st.id}', 'sakit')" class="py-1.5 px-2 rounded-lg border text-xs font-bold transition ${status === 'sakit' ? 'bg-amber-500 text-white border-amber-500 shadow' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'}">S</button>
+                                                        <button onclick="setStudentAttendanceDirect('${selectedDate}', '${st.id}', 'izin')" class="py-1.5 px-2 rounded-lg border text-xs font-bold transition ${status === 'izin' ? 'bg-blue-500 text-white border-blue-500 shadow' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'}">I</button>
+                                                        <button onclick="setStudentAttendanceDirect('${selectedDate}', '${st.id}', 'alpa')" class="py-1.5 px-2 rounded-lg border text-xs font-bold transition ${status === 'alpa' ? 'bg-rose-600 text-white border-rose-600 shadow' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'}">A</button>
+                                                    </div>
+                                                </td>
+                                            </tr>`;
+                                        }).join('') || `<tr><td colspan="4" class="p-6 text-center text-xs text-slate-400">Tidak ada siswa di kelas ${selectedClass || 'ini'}.</td></tr>`}
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="flex justify-end">
+                                <button onclick="saveDataToCloud(true)" class="px-5 py-2.5 bg-[#0d8a5e] hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold shadow">
+                                    <i class="fa-solid fa-floppy-disk mr-1.5"></i> Simpan Presensi Kelas ${selectedClass}
                                 </button>
                             </div>
                         </div>
 
-                        <div class="overflow-x-auto">
-                            <table class="w-full text-left text-sm border-collapse min-w-[500px]">
-                                <thead class="bg-slate-100 text-slate-700">
-                                    <tr>
-                                        <th class="p-3 rounded-tl-xl w-14">No</th>
-                                        <th class="p-3">Nama Siswa</th>
-                                        <th class="p-3 w-20">Kelas</th>
-                                        <th class="p-3 rounded-tr-xl text-center w-80">Keterangan Kehadiran</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    ${filteredStudents.map((st, idx) => {
-                                        const status = dailyAtt[st.id] || '';
-                                        return `
-                                        <tr class="border-b border-slate-100 hover:bg-slate-50">
-                                            <td class="p-3">${idx + 1}</td>
-                                            <td class="p-3 font-semibold text-slate-800">${st.name} <span class="text-xs font-normal text-slate-400">(${st.nis || '-'})</span></td>
-                                            <td class="p-3 text-xs font-medium text-emerald-700">${st.className}</td>
-                                            <td class="p-3">
-                                                <div class="grid grid-cols-4 gap-1">
-                                                    <button onclick="setStudentAttendanceDirect('${selectedDate}', '${st.id}', 'hadir')" class="py-1.5 px-2 rounded-lg border text-xs font-bold transition ${status === 'hadir' ? 'bg-emerald-600 text-white border-emerald-600 shadow' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'}">H</button>
-                                                    <button onclick="setStudentAttendanceDirect('${selectedDate}', '${st.id}', 'sakit')" class="py-1.5 px-2 rounded-lg border text-xs font-bold transition ${status === 'sakit' ? 'bg-amber-500 text-white border-amber-500 shadow' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'}">S</button>
-                                                    <button onclick="setStudentAttendanceDirect('${selectedDate}', '${st.id}', 'izin')" class="py-1.5 px-2 rounded-lg border text-xs font-bold transition ${status === 'izin' ? 'bg-blue-500 text-white border-blue-500 shadow' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'}">I</button>
-                                                    <button onclick="setStudentAttendanceDirect('${selectedDate}', '${st.id}', 'alpa')" class="py-1.5 px-2 rounded-lg border text-xs font-bold transition ${status === 'alpa' ? 'bg-rose-600 text-white border-rose-600 shadow' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'}">A</button>
-                                                </div>
-                                            </td>
-                                        </tr>`;
-                                    }).join('') || `<tr><td colspan="4" class="p-6 text-center text-xs text-slate-400">Tidak ada siswa di kelas ${selectedClass || 'ini'}.</td></tr>`}
-                                </tbody>
-                            </table>
-                        </div>
-                        <div class="flex justify-end">
-                            <button onclick="saveDataToCloud(true)" class="px-5 py-2.5 bg-[#0d8a5e] hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold shadow">
-                                <i class="fa-solid fa-floppy-disk mr-1.5"></i> Simpan Presensi Kelas ${selectedClass}
-                            </button>
+                        <!-- REKAP PRESENSI SISWA -->
+                        <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+                            <div class="flex flex-wrap justify-between items-center gap-3">
+                                <div>
+                                    <h3 class="text-base font-bold text-slate-900 flex items-center">
+                                        <i class="fa-solid fa-table-cells-large text-emerald-600 mr-2"></i> Rekap Presensi Siswa (${selectedClass || '-'})
+                                    </h3>
+                                    <p class="text-xs text-slate-500 mt-0.5">
+                                        Tanggal tercatat (${recap.activeDates.length}): <span class="font-semibold text-slate-700">${recap.activeDates.length > 0 ? recap.activeDates.join(', ') : 'Belum ada presensi tersimpan'}</span>
+                                    </p>
+                                </div>
+                                <button onclick="exportAttendanceRecapExcel('${selectedClass}')" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold shadow flex items-center">
+                                    <i class="fa-solid fa-file-excel mr-1.5"></i> Unduh Rekap Excel
+                                </button>
+                            </div>
+
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-left text-sm border-collapse min-w-[560px]">
+                                    <thead class="bg-slate-100 text-slate-700">
+                                        <tr>
+                                            <th class="p-3 rounded-tl-xl w-14">No</th>
+                                            <th class="p-3">Nama Siswa</th>
+                                            <th class="p-3 text-center w-16">H</th>
+                                            <th class="p-3 text-center w-16">S</th>
+                                            <th class="p-3 text-center w-16">I</th>
+                                            <th class="p-3 text-center w-16">A</th>
+                                            <th class="p-3 text-center w-24">Total</th>
+                                            <th class="p-3 rounded-tr-xl text-center w-24">% Hadir</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${recap.rows.map((r, idx) => `
+                                            <tr class="border-b border-slate-100 hover:bg-slate-50">
+                                                <td class="p-3">${idx + 1}</td>
+                                                <td class="p-3 font-semibold text-slate-800">${r.name}</td>
+                                                <td class="p-3 text-center font-bold text-emerald-700">${r.h}</td>
+                                                <td class="p-3 text-center font-bold text-amber-600">${r.s}</td>
+                                                <td class="p-3 text-center font-bold text-blue-600">${r.i}</td>
+                                                <td class="p-3 text-center font-bold text-rose-600">${r.a}</td>
+                                                <td class="p-3 text-center font-semibold text-slate-700">${r.totalRecorded}</td>
+                                                <td class="p-3 text-center">
+                                                    <span class="px-2 py-0.5 rounded-lg text-xs font-bold bg-indigo-50 text-indigo-700">${r.persentaseHadir}%</span>
+                                                </td>
+                                            </tr>
+                                        `).join('') || `<tr><td colspan="8" class="p-6 text-center text-xs text-slate-400">Belum ada rekap presensi untuk kelas ${selectedClass || 'ini'}.</td></tr>`}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
                 `;
