@@ -38,6 +38,10 @@
         let ttsEnabled = false;
         let ttsInterval = null;
 
+        function normalizeEmail(email) {
+            return String(email || '').trim().toLowerCase();
+        }
+
         // Helper ID siswa yang konsisten (tidak berubah meski impor Excel berulang)
         function generateStableStudentId(className, name) {
             const cleanClass = String(className || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_');
@@ -157,7 +161,7 @@
 
         async function handleLoginSubmit(e) {
             e.preventDefault();
-            const email = document.getElementById('loginEmail').value;
+            const email = normalizeEmail(document.getElementById('loginEmail').value);
             const password = document.getElementById('loginPassword').value;
             const btn = document.getElementById('loginBtn');
             btn.innerText = "Memproses...";
@@ -173,18 +177,21 @@
                     currentUser = email;
                     currentUserName = data.name || email.split('@')[0];
 
-                    const localSaved = localStorage.getItem('mang_adit_data_' + email);
+                    const localSaved = localStorage.getItem('mang_adit_data_' + email) || localStorage.getItem('mang_adit_backup_data');
                     if (localSaved) {
                         try {
-                            appData = JSON.parse(localSaved);
-                        } catch (e) {
-                            if (data.appData) appData = { ...appData, ...data.appData };
-                        }
-                    } else if (data.appData) {
-                        appData = { ...appData, ...data.appData };
+                            appData = { ...appData, ...JSON.parse(localSaved) };
+                        } catch (err) {}
+                    }
+                    if (data.appData && typeof data.appData === 'object') {
+                        appData = {
+                            ...appData,
+                            ...data.appData,
+                            attendance: { ...(appData.attendance || {}), ...(data.appData.attendance || {}) },
+                            grades: { ...(appData.grades || {}), ...(data.appData.grades || {}) }
+                        };
                     }
 
-                    // Normalisasi ID siswa agar konsisten
                     if (Array.isArray(appData.students)) {
                         appData.students = appData.students.map(st => ({
                             ...st,
@@ -192,6 +199,8 @@
                         }));
                     }
 
+                    localStorage.setItem('mang_adit_data_' + email, JSON.stringify(appData));
+                    localStorage.setItem('mang_adit_backup_data', JSON.stringify(appData));
                     renderPortalSelector();
                 } else {
                     alert(data.message);
@@ -201,12 +210,12 @@
             } catch (err) {
                 currentUser = email;
                 currentUserName = email.split('@')[0];
-                const localSaved = localStorage.getItem('mang_adit_data_' + email);
+                const localSaved = localStorage.getItem('mang_adit_data_' + email) || localStorage.getItem('mang_adit_backup_data');
                 if (localSaved) {
-                    appData = JSON.parse(localSaved);
+                    appData = { ...appData, ...JSON.parse(localSaved) };
                     renderPortalSelector();
                 } else {
-                    alert("Koneksi server gagal dan belum ada data tersimpan di HP: " + err.message);
+                    alert("Koneksi server gagal dan belum ada data tersimpan: " + err.message);
                     btn.innerText = "Masuk ke Aplikasi";
                     btn.disabled = false;
                 }
@@ -216,7 +225,7 @@
         async function handleRegisterSubmit(e) {
             e.preventDefault();
             const name = document.getElementById('regName').value;
-            const email = document.getElementById('regEmail').value;
+            const email = normalizeEmail(document.getElementById('regEmail').value);
             const password = document.getElementById('regPassword').value;
             const btn = document.getElementById('regBtn');
             btn.innerText = "Mendaftarkan...";
@@ -244,7 +253,7 @@
 
         async function handleRequestOTP(e) {
             e.preventDefault();
-            const email = document.getElementById('forgotEmail').value;
+            const email = normalizeEmail(document.getElementById('forgotEmail').value);
             const btn = document.getElementById('otpReqBtn');
             btn.innerText = "Mengirim OTP...";
             btn.disabled = true;
@@ -272,7 +281,7 @@
 
         async function handleVerifyOTPAndReset(e) {
             e.preventDefault();
-            const email = document.getElementById('forgotEmail').value;
+            const email = normalizeEmail(document.getElementById('forgotEmail').value);
             const otp = document.getElementById('otpCode').value;
             const newPassword = document.getElementById('newPassword').value;
             const btn = document.getElementById('otpResetBtn');
@@ -300,19 +309,29 @@
         }
 
         async function saveDataToCloud(showToast = false) {
-            if (currentUser) {
-                localStorage.setItem('mang_adit_data_' + currentUser, JSON.stringify(appData));
+            const cleanEmail = normalizeEmail(currentUser);
+            if (cleanEmail) {
+                localStorage.setItem('mang_adit_data_' + cleanEmail, JSON.stringify(appData));
+                localStorage.setItem('mang_adit_backup_data', JSON.stringify(appData));
             }
-            if (!currentUser) return;
+            if (!cleanEmail) return;
+
             try {
-                await fetch(SCRIPT_URL, {
+                const res = await fetch(SCRIPT_URL, {
                     method: 'POST',
-                    body: JSON.stringify({ action: 'save_data', email: currentUser, appData })
+                    body: JSON.stringify({ action: 'save_data', email: cleanEmail, appData })
                 });
-                if (showToast) alert("Data berhasil disimpan & disinkronkan!");
+                const result = await res.json().catch(() => ({}));
+                if (showToast) {
+                    if (result && result.status === 'error') {
+                        alert("Tersimpan di perangkat, namun cloud gagal: " + (result.message || ""));
+                    } else {
+                        alert("Data berhasil disimpan!");
+                    }
+                }
             } catch (err) {
                 console.error("Gagal sinkronisasi cloud:", err);
-                if (showToast) alert("Disimpan aman di memori HP (Offline Mode).");
+                if (showToast) alert("Disimpan aman di memori perangkat (Offline Mode).");
             }
         }
 
@@ -439,7 +458,7 @@
                         <textarea id="modulBody" class="w-full h-44 p-3 border border-slate-200 rounded-xl text-sm" placeholder="Tujuan Pembelajaran, Pemahaman Bermakna, Langkah Kegiatan Pembelajaran, dan Ringkasan Bahan Ajar..."></textarea>
                         <div class="flex justify-end space-x-2">
                             <button onclick="saveModulItem()" class="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold shadow">
-                                <i class="fa-solid fa-cloud-arrow-up mr-1"></i> Simpan ke Cloud
+                                <i class="fa-solid fa-cloud-arrow-up mr-1"></i> Simpan
                             </button>
                         </div>
                         <div class="pt-4 border-t border-slate-100">
@@ -877,7 +896,7 @@ Penerapan konsep ini bermanfaat langsung dalam memecahkan permasalahan kehidupan
             } else if (tab === 'presensi') {
                 const today = new Date().toISOString().split('T')[0];
                 const selectedDate = document.getElementById('presensiDate')?.value || today;
-                
+
                 const classList = [...new Set(appData.students.map(s => s.className))].sort();
                 const selectedClass = document.getElementById('presensiClassFilter')?.value || (classList.length > 0 ? classList[0] : '');
 
@@ -1097,13 +1116,13 @@ Penerapan konsep ini bermanfaat langsung dalam memecahkan permasalahan kehidupan
             reader.onload = function(evt) {
                 const data = new Uint8Array(evt.target.result);
                 const workbook = XLSX.read(data, { type: 'array' });
-                
+
                 let importedStudents = [];
 
                 workbook.SheetNames.forEach(sheetName => {
                     const sheet = workbook.Sheets[sheetName];
                     const dfRaw = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
-                    
+
                     let headerRowIdx = -1;
                     let nameColIdx = -1;
                     let nisColIdx = -1;
@@ -1142,12 +1161,12 @@ Penerapan konsep ini bermanfaat langsung dalam memecahkan permasalahan kehidupan
                     for (let r = startRow; r < dfRaw.length; r++) {
                         const row = dfRaw[r];
                         let curNameCol = nameColIdx !== -1 ? nameColIdx : (row.length > 1 ? 1 : 0);
-                        
+
                         if (curNameCol < row.length) {
                             const rawName = row[curNameCol];
                             if (rawName !== undefined && rawName !== null) {
                                 const nameStr = String(rawName).trim();
-                                
+
                                 const lowerName = nameStr.toLowerCase();
                                 const isInvalidText = lowerName.includes('presensi') || 
                                                       lowerName.includes('data master') || 
@@ -1161,7 +1180,7 @@ Penerapan konsep ini bermanfaat langsung dalam memecahkan permasalahan kehidupan
 
                                 if (nameStr !== "" && isNaN(nameStr) && !isInvalidText) {
                                     const nis = nisColIdx !== -1 && nisColIdx < row.length ? String(row[nisColIdx]).trim() : '';
-                                    
+
                                     let className = classColIdx !== -1 && classColIdx < row.length && String(row[classColIdx]).trim() !== "" ? String(row[classColIdx]).trim() : sheetName;
                                     if (className.toLowerCase() === 'sheet1' || className.toLowerCase() === 'data siswa' || className.toLowerCase() === 'Sheet1') {
                                         className = 'Umum';
