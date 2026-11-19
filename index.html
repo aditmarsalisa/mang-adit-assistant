@@ -39,34 +39,35 @@
         </div>
     </div>
 
-    <!-- MODAL TAMBAH KOLOM NILAI BARU -->
-    <div id="addGradeColumnModal" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-[1px] flex items-center justify-center p-4">
+    <!-- MODAL TAMBAH / EDIT KOLOM NILAI -->
+    <div id="gradeColumnModal" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-[1px] flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden">
             <div class="px-5 py-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
                 <div>
-                    <h3 class="font-bold text-slate-900 text-base flex items-center">
+                    <h3 id="gradeColumnModalTitle" class="font-bold text-slate-900 text-base flex items-center">
                         <i class="fa-solid fa-table-columns text-indigo-600 mr-2"></i> Tambah Kategori / Kolom Nilai
                     </h3>
-                    <p class="text-xs text-slate-500 mt-0.5">Contoh: Tugas 1, Tugas 2, Praktik, Kuis</p>
+                    <p id="gradeColumnModalDesc" class="text-xs text-slate-500 mt-0.5">Contoh: Tugas 1, Tugas 2, Praktik, Kuis</p>
                 </div>
-                <button onclick="closeAddGradeColumnModal()" class="w-8 h-8 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/70 flex items-center justify-center transition">
+                <button onclick="closeGradeColumnModal()" class="w-8 h-8 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/70 flex items-center justify-center transition">
                     <i class="fa-solid fa-xmark"></i>
                 </button>
             </div>
-            <form onsubmit="handleAddGradeColumnSubmit(event)" class="p-5 space-y-4">
+            <form onsubmit="handleGradeColumnSubmit(event)" class="p-5 space-y-4">
+                <input type="hidden" id="editingGradeColKey" value="">
                 <div>
                     <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Nama Kolom / Kategori</label>
-                    <input type="text" id="newGradeColLabel" required placeholder="Contoh: Tugas 1" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 focus:outline-none text-sm">
+                    <input type="text" id="gradeColLabelInput" required placeholder="Contoh: Tugas 1" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 focus:outline-none text-sm">
                 </div>
                 <div>
-                    <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Bobot Awal (%)</label>
-                    <input type="number" id="newGradeColWeight" min="0" max="100" value="10" required class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 focus:outline-none text-sm">
+                    <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Bobot (%)</label>
+                    <input type="number" id="gradeColWeightInput" min="0" max="100" value="10" required class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 focus:outline-none text-sm">
                 </div>
                 <div class="flex justify-end gap-2 pt-2">
-                    <button type="button" onclick="closeAddGradeColumnModal()" class="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50">
+                    <button type="button" onclick="closeGradeColumnModal()" class="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50">
                         Batal
                     </button>
-                    <button type="submit" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow">
+                    <button type="submit" id="gradeColumnSubmitBtn" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow">
                         + Tambahkan Kolom
                     </button>
                 </div>
@@ -80,10 +81,10 @@
         const SESSION_STORAGE_KEY = 'mang_adit_active_session';
 
         const DEFAULT_GRADE_COLUMNS = [
-            { key: 'tugas', label: 'Tugas', weight: 25, isDefault: true },
-            { key: 'uh', label: 'UH', weight: 25, isDefault: true },
-            { key: 'pts', label: 'PTS', weight: 25, isDefault: true },
-            { key: 'pas', label: 'PAS', weight: 25, isDefault: true }
+            { key: 'tugas', label: 'Tugas', weight: 25 },
+            { key: 'uh', label: 'UH', weight: 25 },
+            { key: 'pts', label: 'PTS', weight: 25 },
+            { key: 'pas', label: 'PAS', weight: 25 }
         ];
 
         let currentUser = null;
@@ -114,7 +115,7 @@
         }
 
         function ensureGradeColumns() {
-            if (!Array.isArray(appData.gradeColumns) || appData.gradeColumns.length === 0) {
+            if (!Array.isArray(appData.gradeColumns)) {
                 appData.gradeColumns = DEFAULT_GRADE_COLUMNS.map(c => ({ ...c }));
             }
         }
@@ -1095,44 +1096,84 @@ Penerapan konsep ini bermanfaat langsung dalam memecahkan permasalahan kehidupan
             closeExportRecapModal();
         }
 
-        // ==================== KOLOM NILAI DINAMIS ====================
+        // ==================== KOLOM NILAI DINAMIS (EDIT NAMA, BOBOT & HAPUS) ====================
         function openAddGradeColumnModal() {
-            const modal = document.getElementById('addGradeColumnModal');
-            const labelInput = document.getElementById('newGradeColLabel');
-            const weightInput = document.getElementById('newGradeColWeight');
+            const modal = document.getElementById('gradeColumnModal');
+            const titleEl = document.getElementById('gradeColumnModalTitle');
+            const descEl = document.getElementById('gradeColumnModalDesc');
+            const submitBtn = document.getElementById('gradeColumnSubmitBtn');
+            const keyInput = document.getElementById('editingGradeColKey');
+            const labelInput = document.getElementById('gradeColLabelInput');
+            const weightInput = document.getElementById('gradeColWeightInput');
+
+            if (keyInput) keyInput.value = '';
+            if (titleEl) titleEl.innerHTML = `<i class="fa-solid fa-table-columns text-indigo-600 mr-2"></i> Tambah Kategori / Kolom Nilai`;
+            if (descEl) descEl.innerText = 'Contoh: Tugas 1, Tugas 2, Praktik, Kuis';
+            if (submitBtn) submitBtn.innerText = '+ Tambahkan Kolom';
             if (labelInput) labelInput.value = '';
             if (weightInput) weightInput.value = '10';
             if (modal) modal.classList.remove('hidden');
             if (labelInput) setTimeout(() => labelInput.focus(), 50);
         }
 
-        function closeAddGradeColumnModal() {
-            const modal = document.getElementById('addGradeColumnModal');
+        function openEditGradeColumnModal(colKey) {
+            ensureGradeColumns();
+            const col = appData.gradeColumns.find(c => c.key === colKey);
+            if (!col) return;
+
+            const modal = document.getElementById('gradeColumnModal');
+            const titleEl = document.getElementById('gradeColumnModalTitle');
+            const descEl = document.getElementById('gradeColumnModalDesc');
+            const submitBtn = document.getElementById('gradeColumnSubmitBtn');
+            const keyInput = document.getElementById('editingGradeColKey');
+            const labelInput = document.getElementById('gradeColLabelInput');
+            const weightInput = document.getElementById('gradeColWeightInput');
+
+            if (keyInput) keyInput.value = col.key;
+            if (titleEl) titleEl.innerHTML = `<i class="fa-solid fa-pen-to-square text-indigo-600 mr-2"></i> Edit Kolom Nilai`;
+            if (descEl) descEl.innerText = 'Ubah nama kolom atau bobot persentasenya';
+            if (submitBtn) submitBtn.innerText = 'Simpan Perubahan';
+            if (labelInput) labelInput.value = col.label;
+            if (weightInput) weightInput.value = col.weight ?? 0;
+            if (modal) modal.classList.remove('hidden');
+            if (labelInput) setTimeout(() => labelInput.focus(), 50);
+        }
+
+        function closeGradeColumnModal() {
+            const modal = document.getElementById('gradeColumnModal');
             if (modal) modal.classList.add('hidden');
         }
 
-        function handleAddGradeColumnSubmit(e) {
+        function handleGradeColumnSubmit(e) {
             e.preventDefault();
             ensureGradeColumns();
-            const rawLabel = document.getElementById('newGradeColLabel').value.trim();
-            const weight = parseFloat(document.getElementById('newGradeColWeight').value);
+            const editingKey = document.getElementById('editingGradeColKey').value.trim();
+            const rawLabel = document.getElementById('gradeColLabelInput').value.trim();
+            const weight = parseFloat(document.getElementById('gradeColWeightInput').value);
             if (!rawLabel) return;
 
-            const baseKey = rawLabel.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'komponen';
-            let uniqueKey = baseKey;
-            let counter = 2;
-            while (appData.gradeColumns.some(c => c.key === uniqueKey)) {
-                uniqueKey = `${baseKey}_${counter++}`;
+            if (editingKey) {
+                const col = appData.gradeColumns.find(c => c.key === editingKey);
+                if (col) {
+                    col.label = rawLabel;
+                    col.weight = isNaN(weight) ? 0 : weight;
+                }
+            } else {
+                const baseKey = rawLabel.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'komponen';
+                let uniqueKey = baseKey;
+                let counter = 2;
+                while (appData.gradeColumns.some(c => c.key === uniqueKey)) {
+                    uniqueKey = `${baseKey}_${counter++}`;
+                }
+
+                appData.gradeColumns.push({
+                    key: uniqueKey,
+                    label: rawLabel,
+                    weight: isNaN(weight) ? 0 : weight
+                });
             }
 
-            appData.gradeColumns.push({
-                key: uniqueKey,
-                label: rawLabel,
-                weight: isNaN(weight) ? 0 : weight,
-                isDefault: false
-            });
-
-            closeAddGradeColumnModal();
+            closeGradeColumnModal();
             switchJurnalTab('nilai');
             recalculateAllGrades();
         }
@@ -1149,7 +1190,9 @@ Penerapan konsep ini bermanfaat langsung dalam memecahkan permasalahan kehidupan
         function deleteGradeColumn(colKey) {
             ensureGradeColumns();
             const col = appData.gradeColumns.find(c => c.key === colKey);
-            if (!col || col.isDefault) return;
+            if (!col) return;
+            if (!confirm(`Hapus kolom "${col.label}"?`)) return;
+
             appData.gradeColumns = appData.gradeColumns.filter(c => c.key !== colKey);
             Object.keys(appData.grades || {}).forEach(stId => {
                 if (appData.grades[stId] && Object.prototype.hasOwnProperty.call(appData.grades[stId], colKey)) {
@@ -1404,7 +1447,7 @@ Penerapan konsep ini bermanfaat langsung dalam memecahkan permasalahan kehidupan
                         <div class="flex flex-wrap justify-between items-center gap-3">
                             <div>
                                 <h2 class="text-lg font-bold text-slate-900">Kalkulator Rekap Nilai Akhir Otomatis</h2>
-                                <p class="text-xs text-slate-500">Pilih kelas di dropdown, tambah kolom nilai sesuai kebutuhan, lalu simpan atau unduh rekap.</p>
+                                <p class="text-xs text-slate-500">Pilih kelas di dropdown, tambah atau edit kolom nilai sesuai kebutuhan, lalu simpan atau unduh rekap.</p>
                             </div>
                             <div class="flex flex-wrap items-center gap-2">
                                 <select id="nilaiClassFilter" onchange="switchJurnalTab('nilai')" class="p-2 border border-slate-200 rounded-xl text-xs font-bold bg-white text-indigo-700 shadow-sm">
@@ -1435,11 +1478,14 @@ Penerapan konsep ini bermanfaat langsung dalam memecahkan permasalahan kehidupan
                                     <div class="bg-white p-2.5 rounded-xl border border-slate-200/90 space-y-1">
                                         <div class="flex items-center justify-between gap-1">
                                             <label class="block text-[11px] font-semibold text-slate-600 truncate" title="${col.label}">${col.label} (%)</label>
-                                            ${!col.isDefault ? `
+                                            <div class="flex items-center gap-1 shrink-0">
+                                                <button type="button" onclick="openEditGradeColumnModal('${col.key}')" title="Edit nama/bobot ${col.label}" class="text-indigo-500 hover:text-indigo-700 text-[11px] leading-none">
+                                                    <i class="fa-solid fa-pen"></i>
+                                                </button>
                                                 <button type="button" onclick="deleteGradeColumn('${col.key}')" title="Hapus kolom ${col.label}" class="text-rose-500 hover:text-rose-700 text-xs leading-none">
                                                     <i class="fa-solid fa-xmark"></i>
                                                 </button>
-                                            ` : ''}
+                                            </div>
                                         </div>
                                         <input type="number" min="0" max="100" value="${col.weight ?? 0}" onchange="updateGradeColumnWeight('${col.key}', this.value)" class="w-full p-1.5 border border-slate-200 rounded-lg text-xs font-bold bg-slate-50/60">
                                     </div>
