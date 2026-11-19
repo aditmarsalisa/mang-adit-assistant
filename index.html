@@ -26,10 +26,10 @@
         <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden">
             <div class="px-5 py-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
                 <div>
-                    <h3 class="font-bold text-slate-900 text-base flex items-center">
+                    <h3 id="exportRecapModalTitle" class="font-bold text-slate-900 text-base flex items-center">
                         <i class="fa-solid fa-file-excel text-emerald-600 mr-2"></i> Unduh Rekap Excel
                     </h3>
-                    <p class="text-xs text-slate-500 mt-0.5">Pilih kelas yang ingin diunduh rekap presensinya</p>
+                    <p id="exportRecapModalDesc" class="text-xs text-slate-500 mt-0.5">Pilih kelas yang ingin diunduh rekapnya</p>
                 </div>
                 <button onclick="closeExportRecapModal()" class="w-8 h-8 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/70 flex items-center justify-center transition">
                     <i class="fa-solid fa-xmark"></i>
@@ -909,7 +909,7 @@ Penerapan konsep ini bermanfaat langsung dalam memecahkan permasalahan kehidupan
             return { rows, activeDates };
         }
 
-        function buildRecapSheetData(className) {
+        function buildAttendanceSheetData(className) {
             const { rows, activeDates } = getAttendanceRecapForClass(className);
             return rows.map((r, idx) => ({
                 No: idx + 1,
@@ -926,11 +926,42 @@ Penerapan konsep ini bermanfaat langsung dalam memecahkan permasalahan kehidupan
             }));
         }
 
-        function openExportRecapModal() {
+        function buildGradesSheetData(className) {
+            const classStudents = appData.students.filter(st => st.className === className);
+            return classStudents.map((st, idx) => {
+                const g = appData.grades[st.id] || { tugas: 0, uh: 0, pts: 0, pas: 0, finalScore: 0, predicate: getPredicate(0) };
+                return {
+                    No: idx + 1,
+                    Nama_Siswa: st.name,
+                    NIS: st.nis || '-',
+                    Kelas: st.className,
+                    Tugas: g.tugas ?? 0,
+                    UH: g.uh ?? 0,
+                    PTS: g.pts ?? 0,
+                    PAS: g.pas ?? 0,
+                    Nilai_Akhir: g.finalScore ?? 0,
+                    Predikat: g.predicate || getPredicate(parseFloat(g.finalScore) || 0)
+                };
+            });
+        }
+
+        function openExportRecapModal(mode = 'attendance') {
             const classList = [...new Set(appData.students.map(s => s.className).filter(Boolean))].sort();
             const modal = document.getElementById('exportRecapModal');
             const body = document.getElementById('exportRecapModalBody');
+            const titleEl = document.getElementById('exportRecapModalTitle');
+            const descEl = document.getElementById('exportRecapModalDesc');
             if (!modal || !body) return;
+
+            const isGrades = mode === 'grades';
+            if (titleEl) {
+                titleEl.innerHTML = `<i class="fa-solid fa-file-excel text-emerald-600 mr-2"></i> ${isGrades ? 'Unduh Rekap Nilai Excel' : 'Unduh Rekap Excel'}`;
+            }
+            if (descEl) {
+                descEl.innerText = isGrades
+                    ? 'Pilih kelas yang ingin diunduh rekap nilainya'
+                    : 'Pilih kelas yang ingin diunduh rekap presensinya';
+            }
 
             if (classList.length === 0) {
                 body.innerHTML = `<p class="text-xs text-slate-500 text-center py-4">Belum ada data kelas/siswa untuk diunduh.</p>`;
@@ -941,8 +972,9 @@ Penerapan konsep ini bermanfaat langsung dalam memecahkan permasalahan kehidupan
 
                 const perClassButtons = classList.map(cls => {
                     const count = appData.students.filter(s => s.className === cls).length;
+                    const safeCls = cls.replace(/'/g, "\\'");
                     return `
-                        <button onclick="downloadSingleClassRecap('${cls.replace(/'/g, "\\'")}')" class="w-full px-4 py-3 rounded-xl border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/60 flex items-center justify-between text-left transition group">
+                        <button onclick="downloadSingleClassRecap('${safeCls}', '${mode}')" class="w-full px-4 py-3 rounded-xl border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/60 flex items-center justify-between text-left transition group">
                             <div>
                                 <span class="font-bold text-sm text-slate-800 group-hover:text-emerald-800">Kelas ${cls}</span>
                                 <span class="block text-[11px] text-slate-400">${count} siswa</span>
@@ -957,7 +989,7 @@ Penerapan konsep ini bermanfaat langsung dalam memecahkan permasalahan kehidupan
                 body.innerHTML = `
                     <div class="space-y-1.5">${perClassButtons}</div>
                     <div class="pt-3 mt-2 border-t border-slate-200">
-                        <button onclick="downloadAllClassesRecap()" class="w-full px-4 py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md flex items-center justify-between transition">
+                        <button onclick="downloadAllClassesRecap('${mode}')" class="w-full px-4 py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md flex items-center justify-between transition">
                             <span><i class="fa-solid fa-layer-group mr-2"></i> Unduh Semua Kelas (${rangeLabel})</span>
                             <i class="fa-solid fa-file-arrow-down"></i>
                         </button>
@@ -973,29 +1005,32 @@ Penerapan konsep ini bermanfaat langsung dalam memecahkan permasalahan kehidupan
             if (modal) modal.classList.add('hidden');
         }
 
-        function downloadSingleClassRecap(className) {
-            const exportRows = buildRecapSheetData(className);
+        function downloadSingleClassRecap(className, mode = 'attendance') {
+            const isGrades = mode === 'grades';
+            const exportRows = isGrades ? buildGradesSheetData(className) : buildAttendanceSheetData(className);
             if (!className || exportRows.length === 0) {
-                return alert(`Tidak ada data rekap presensi untuk kelas ${className || '-'}.`);
+                return alert(`Tidak ada data ${isGrades ? 'rekap nilai' : 'rekap presensi'} untuk kelas ${className || '-'}.`);
             }
             const ws = XLSX.utils.json_to_sheet(exportRows);
             const wb = XLSX.utils.book_new();
             const safeSheetName = String(className).slice(0, 31) || 'Rekap';
             XLSX.utils.book_append_sheet(wb, ws, safeSheetName);
-            XLSX.writeFile(wb, `Rekap_Presensi_${className}.xlsx`);
+            const prefix = isGrades ? 'Rekap_Nilai' : 'Rekap_Presensi';
+            XLSX.writeFile(wb, `${prefix}_${className}.xlsx`);
             closeExportRecapModal();
         }
 
-        function downloadAllClassesRecap() {
+        function downloadAllClassesRecap(mode = 'attendance') {
             const classList = [...new Set(appData.students.map(s => s.className).filter(Boolean))].sort();
             if (classList.length === 0) {
                 return alert("Tidak ada data kelas untuk diunduh.");
             }
+            const isGrades = mode === 'grades';
             const wb = XLSX.utils.book_new();
             let addedSheets = 0;
 
             classList.forEach(cls => {
-                const exportRows = buildRecapSheetData(cls);
+                const exportRows = isGrades ? buildGradesSheetData(cls) : buildAttendanceSheetData(cls);
                 const ws = XLSX.utils.json_to_sheet(exportRows);
                 const safeSheetName = String(cls).slice(0, 31) || `Kelas_${addedSheets + 1}`;
                 XLSX.utils.book_append_sheet(wb, ws, safeSheetName);
@@ -1006,7 +1041,8 @@ Penerapan konsep ini bermanfaat langsung dalam memecahkan permasalahan kehidupan
             const rangeLabel = classList.length > 1
                 ? `${classList[0]}_sd_${classList[classList.length - 1]}`
                 : classList[0];
-            XLSX.writeFile(wb, `Rekap_Presensi_${rangeLabel}.xlsx`);
+            const prefix = isGrades ? 'Rekap_Nilai' : 'Rekap_Presensi';
+            XLSX.writeFile(wb, `${prefix}_${rangeLabel}.xlsx`);
             closeExportRecapModal();
         }
 
@@ -1198,7 +1234,7 @@ Penerapan konsep ini bermanfaat langsung dalam memecahkan permasalahan kehidupan
                                 <button onclick="markAllPresentForClass('${selectedDate}', '${selectedClass}')" class="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow flex items-center">
                                     <i class="fa-solid fa-check-double mr-1.5"></i> Hadir Semua (${selectedClass || '-'})
                                 </button>
-                                <button onclick="openExportRecapModal()" class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold shadow flex items-center">
+                                <button onclick="openExportRecapModal('attendance')" class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold shadow flex items-center">
                                     <i class="fa-solid fa-file-excel mr-1.5"></i> Unduh Rekap Excel
                                 </button>
                             </div>
@@ -1254,11 +1290,14 @@ Penerapan konsep ini bermanfaat langsung dalam memecahkan permasalahan kehidupan
                                 <h2 class="text-lg font-bold text-slate-900">Kalkulator Rekap Nilai Akhir Otomatis</h2>
                                 <p class="text-xs text-slate-500">Pilih kelas di dropdown untuk merekap nilai per kelas secara mandiri.</p>
                             </div>
-                            <div class="flex items-center space-x-2">
+                            <div class="flex flex-wrap items-center gap-2">
                                 <select id="nilaiClassFilter" onchange="switchJurnalTab('nilai')" class="p-2 border border-slate-200 rounded-xl text-xs font-bold bg-white text-indigo-700 shadow-sm">
                                     ${classList.map(cls => `<option value="${cls}" ${cls === selectedClass ? 'selected' : ''}>Kelas: ${cls}</option>`).join('')}
                                     ${classList.length === 0 ? '<option value="">Belum ada kelas</option>' : ''}
                                 </select>
+                                <button onclick="openExportRecapModal('grades')" class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold shadow flex items-center">
+                                    <i class="fa-solid fa-file-excel mr-1.5"></i> Unduh Rekap Excel
+                                </button>
                                 <button onclick="saveDataToCloud(true)" class="px-4 py-2.5 bg-[#0d8a5e] hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold shadow">
                                     <i class="fa-solid fa-floppy-disk mr-1.5"></i> Simpan Nilai Kelas ${selectedClass}
                                 </button>
