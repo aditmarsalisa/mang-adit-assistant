@@ -38,6 +38,13 @@
         let ttsEnabled = false;
         let ttsInterval = null;
 
+        // Helper ID siswa yang konsisten (tidak berubah meski impor Excel berulang)
+        function generateStableStudentId(className, name) {
+            const cleanClass = String(className || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_');
+            const cleanName = String(name || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_');
+            return `stu_${cleanClass}_${cleanName}`;
+        }
+
         // ==================== AUTHENTICATION ====================
         function renderAuth(view = 'login') {
             const app = document.getElementById('app');
@@ -165,8 +172,7 @@
                 if (data.status === 'success') {
                     currentUser = email;
                     currentUserName = data.name || email.split('@')[0];
-                    
-                    // Prioritaskan LocalStorage HP agar data aman dan tidak tertimpa server kosong
+
                     const localSaved = localStorage.getItem('mang_adit_data_' + email);
                     if (localSaved) {
                         try {
@@ -178,6 +184,14 @@
                         appData = { ...appData, ...data.appData };
                     }
 
+                    // Normalisasi ID siswa agar konsisten
+                    if (Array.isArray(appData.students)) {
+                        appData.students = appData.students.map(st => ({
+                            ...st,
+                            id: generateStableStudentId(st.className, st.name)
+                        }));
+                    }
+
                     renderPortalSelector();
                 } else {
                     alert(data.message);
@@ -185,7 +199,6 @@
                     btn.disabled = false;
                 }
             } catch (err) {
-                // Mode offline / cadangan LocalStorage jika server cloud terputus
                 currentUser = email;
                 currentUserName = email.split('@')[0];
                 const localSaved = localStorage.getItem('mang_adit_data_' + email);
@@ -288,18 +301,15 @@
 
         async function saveDataToCloud(showToast = false) {
             if (currentUser) {
-                // Simpan instan ke memori HP (LocalStorage) agar aman dari logout/refresh
                 localStorage.setItem('mang_adit_data_' + currentUser, JSON.stringify(appData));
             }
-
             if (!currentUser) return;
-
             try {
                 await fetch(SCRIPT_URL, {
                     method: 'POST',
                     body: JSON.stringify({ action: 'save_data', email: currentUser, appData })
                 });
-                if (showToast) alert("Data berhasil disimpan & disinkronkan ke server cloud!");
+                if (showToast) alert("Data berhasil disimpan & disinkronkan!");
             } catch (err) {
                 console.error("Gagal sinkronisasi cloud:", err);
                 if (showToast) alert("Disimpan aman di memori HP (Offline Mode).");
@@ -893,7 +903,6 @@ Penerapan konsep ini bermanfaat langsung dalam memecahkan permasalahan kehidupan
                             </div>
                         </div>
 
-                        <!-- TABEL PRESENSI DENGAN TOMBOL KLIK LANGSUNG -->
                         <div class="overflow-x-auto">
                             <table class="w-full text-left text-sm border-collapse min-w-[500px]">
                                 <thead class="bg-slate-100 text-slate-700">
@@ -1071,7 +1080,7 @@ Penerapan konsep ini bermanfaat langsung dalam memecahkan permasalahan kehidupan
             const className = document.getElementById('stuClass').value.trim() || 'Umum';
             if (!name) return alert("Nama siswa wajib diisi.");
             appData.students.push({
-                id: 'stu_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+                id: generateStableStudentId(className, name),
                 name,
                 nis,
                 className
@@ -1159,7 +1168,7 @@ Penerapan konsep ini bermanfaat langsung dalam memecahkan permasalahan kehidupan
                                     }
 
                                     importedStudents.push({
-                                        id: 'stu_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+                                        id: generateStableStudentId(className, nameStr),
                                         name: nameStr,
                                         nis: nis === 'nan' ? '' : nis,
                                         className: className
@@ -1192,11 +1201,7 @@ Penerapan konsep ini bermanfaat langsung dalam memecahkan permasalahan kehidupan
         function setStudentAttendanceDirect(date, studentId, status) {
             if (!appData.attendance[date]) appData.attendance[date] = {};
             appData.attendance[date][studentId] = status;
-            
-            // Simpan otomatis ke Cloud dan memori HP secara instan
             saveDataToCloud(false);
-            
-            // Refresh halaman presensi instan
             switchJurnalTab('presensi');
         }
 
@@ -1207,8 +1212,6 @@ Penerapan konsep ini bermanfaat langsung dalam memecahkan permasalahan kehidupan
             classStudents.forEach(st => {
                 appData.attendance[date][st.id] = 'hadir';
             });
-            
-            // Simpan permanen otomatis
             saveDataToCloud(true);
             switchJurnalTab('presensi');
         }
