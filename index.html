@@ -23,6 +23,9 @@
 
     <!-- SCRIPT UTAMA APLIKASI -->
     <script>
+        const IDLE_TIMEOUT_MS = 10 * 60 * 1000; // 10 menit tanpa interaksi
+        const SESSION_STORAGE_KEY = 'mang_adit_active_session';
+
         let currentUser = null;
         let currentUserName = "Guru";
         let appData = {
@@ -34,7 +37,8 @@
             gridCards: [],
             questionBanks: []
         };
-        let activePortal = null;
+        let activePortal = null; // null (menu utama), 'perangkat', 'jurnal'
+        let activeSubTab = null;  // misal 'presensi', 'nilai', 'jadwal', 'siswa', 'modul', 'kisi', 'soal'
         let ttsEnabled = false;
         let ttsInterval = null;
 
@@ -47,6 +51,86 @@
             const cleanClass = String(className || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_');
             const cleanName = String(name || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_');
             return `stu_${cleanClass}_${cleanName}`;
+        }
+
+        // ==================== MANAJEMEN SESI & IDLE 10 MENIT ====================
+        function persistSessionState() {
+            if (!currentUser) {
+                localStorage.removeItem(SESSION_STORAGE_KEY);
+                return;
+            }
+            const existingRaw = localStorage.getItem(SESSION_STORAGE_KEY);
+            let lastActiveAt = Date.now();
+            if (existingRaw) {
+                try {
+                    const parsed = JSON.parse(existingRaw);
+                    if (typeof parsed.lastActiveAt === 'number') {
+                        lastActiveAt = parsed.lastActiveAt;
+                    }
+                } catch (e) {}
+            }
+            localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify({
+                email: normalizeEmail(currentUser),
+                name: currentUserName,
+                activePortal,
+                activeSubTab,
+                lastActiveAt
+            }));
+        }
+
+        function touchUserActivity() {
+            if (!currentUser) return;
+            const raw = localStorage.getItem(SESSION_STORAGE_KEY);
+            let state = {
+                email: normalizeEmail(currentUser),
+                name: currentUserName,
+                activePortal,
+                activeSubTab,
+                lastActiveAt: Date.now()
+            };
+            if (raw) {
+                try {
+                    state = { ...JSON.parse(raw), email: normalizeEmail(currentUser), name: currentUserName, activePortal, activeSubTab, lastActiveAt: Date.now() };
+                } catch (e) {}
+            }
+            localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(state));
+        }
+
+        function isSessionExpiredByIdle() {
+            const raw = localStorage.getItem(SESSION_STORAGE_KEY);
+            if (!raw) return true;
+            try {
+                const state = JSON.parse(raw);
+                if (!state.email || typeof state.lastActiveAt !== 'number') return true;
+                return (Date.now() - state.lastActiveAt) >= IDLE_TIMEOUT_MS;
+            } catch (e) {
+                return true;
+            }
+        }
+
+        function clearSessionAndGoLogin() {
+            currentUser = null;
+            activePortal = null;
+            activeSubTab = null;
+            localStorage.removeItem(SESSION_STORAGE_KEY);
+            renderAuth('login');
+        }
+
+        function setupActivityListeners() {
+            ['pointerdown', 'keydown', 'scroll', 'touchstart'].forEach(evtName => {
+                window.addEventListener(evtName, () => {
+                    if (currentUser) {
+                        touchUserActivity();
+                    }
+                }, { passive: true });
+            });
+
+            // Cek berkala jika 10 menit berlalu saat tab terbuka
+            setInterval(() => {
+                if (currentUser && isSessionExpiredByIdle()) {
+                    clearSessionAndGoLogin();
+                }
+            }, 15000);
         }
 
         // ==================== AUTHENTICATION ====================
@@ -159,6 +243,31 @@
             }
         }
 
+        function hydrateUserData(email, serverAppData) {
+            const localSaved = localStorage.getItem('mang_adit_data_' + email) || localStorage.getItem('mang_adit_backup_data');
+            if (localSaved) {
+                try {
+                    appData = { ...appData, ...JSON.parse(localSaved) };
+                } catch (err) {}
+            }
+            if (serverAppData && typeof serverAppData === 'object') {
+                appData = {
+                    ...appData,
+                    ...serverAppData,
+                    attendance: { ...(appData.attendance || {}), ...(serverAppData.attendance || {}) },
+                    grades: { ...(appData.grades || {}), ...(serverAppData.grades || {}) }
+                };
+            }
+            if (Array.isArray(appData.students)) {
+                appData.students = appData.students.map(st => ({
+                    ...st,
+                    id: generateStableStudentId(st.className, st.name)
+                }));
+            }
+            localStorage.setItem('mang_adit_data_' + email, JSON.stringify(appData));
+            localStorage.setItem('mang_adit_backup_data', JSON.stringify(appData));
+        }
+
         async function handleLoginSubmit(e) {
             e.preventDefault();
             const email = normalizeEmail(document.getElementById('loginEmail').value);
@@ -176,31 +285,16 @@
                 if (data.status === 'success') {
                     currentUser = email;
                     currentUserName = data.name || email.split('@')[0];
-
-                    const localSaved = localStorage.getItem('mang_adit_data_' + email) || localStorage.getItem('mang_adit_backup_data');
-                    if (localSaved) {
-                        try {
-                            appData = { ...appData, ...JSON.parse(localSaved) };
-                        } catch (err) {}
-                    }
-                    if (data.appData && typeof data.appData === 'object') {
-                        appData = {
-                            ...appData,
-                            ...data.appData,
-                            attendance: { ...(appData.attendance || {}), ...(data.appData.attendance || {}) },
-                            grades: { ...(appData.grades || {}), ...(data.appData.grades || {}) }
-                        };
-                    }
-
-                    if (Array.isArray(appData.students)) {
-                        appData.students = appData.students.map(st => ({
-                            ...st,
-                            id: generateStableStudentId(st.className, st.name)
-                        }));
-                    }
-
-                    localStorage.setItem('mang_adit_data_' + email, JSON.stringify(appData));
-                    localStorage.setItem('mang_adit_backup_data', JSON.stringify(appData));
+                    hydrateUserData(email, data.appData);
+                    activePortal = null;
+                    activeSubTab = null;
+                    localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify({
+                        email,
+                        name: currentUserName,
+                        activePortal: null,
+                        activeSubTab: null,
+                        lastActiveAt: Date.now()
+                    }));
                     renderPortalSelector();
                 } else {
                     alert(data.message);
@@ -212,7 +306,16 @@
                 currentUserName = email.split('@')[0];
                 const localSaved = localStorage.getItem('mang_adit_data_' + email) || localStorage.getItem('mang_adit_backup_data');
                 if (localSaved) {
-                    appData = { ...appData, ...JSON.parse(localSaved) };
+                    hydrateUserData(email, null);
+                    activePortal = null;
+                    activeSubTab = null;
+                    localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify({
+                        email,
+                        name: currentUserName,
+                        activePortal: null,
+                        activeSubTab: null,
+                        lastActiveAt: Date.now()
+                    }));
                     renderPortalSelector();
                 } else {
                     alert("Koneksi server gagal dan belum ada data tersimpan: " + err.message);
@@ -314,6 +417,7 @@
             if (cleanEmail) {
                 localStorage.setItem('mang_adit_data_' + cleanEmail, JSON.stringify(appData));
                 localStorage.setItem('mang_adit_backup_data', JSON.stringify(appData));
+                touchUserActivity();
             }
             if (!cleanEmail) return;
 
@@ -339,6 +443,8 @@
         // ==================== PORTAL SELECTOR ====================
         function renderPortalSelector() {
             activePortal = null;
+            activeSubTab = null;
+            persistSessionState();
             const app = document.getElementById('app');
             app.innerHTML = `
                 <div class="flex-1 flex flex-col justify-center items-center p-6 bg-gradient-to-br from-slate-100 to-indigo-50">
@@ -349,7 +455,7 @@
                                 <h1 class="text-2xl font-bold text-slate-900">Pilih Ruang Kerja Utama</h1>
                                 <p class="text-sm text-slate-500">Silakan pilih portal administrasi yang ingin Anda akses</p>
                             </div>
-                            <button onclick="currentUser=null; renderAuth('login')" class="px-4 py-2 bg-white border border-slate-200 text-rose-600 hover:bg-rose-50 rounded-xl text-sm font-semibold shadow-sm transition">
+                            <button onclick="clearSessionAndGoLogin()" class="px-4 py-2 bg-white border border-slate-200 text-rose-600 hover:bg-rose-50 rounded-xl text-sm font-semibold shadow-sm transition">
                                 <i class="fa-solid fa-arrow-right-from-bracket mr-2"></i>Keluar
                             </button>
                         </div>
@@ -376,17 +482,17 @@
             `;
         }
 
-        function enterPortal(portal) {
+        function enterPortal(portal, initialSubTab = null) {
             activePortal = portal;
             if (portal === 'perangkat') {
-                renderPerangkatAjarApp();
+                renderPerangkatAjarApp(initialSubTab || 'modul');
             } else {
-                renderJurnalGuruApp();
+                renderJurnalGuruApp(initialSubTab || 'jadwal');
             }
         }
 
         // ==================== 1. PORTAL PERANGKAT AJAR ====================
-        function renderPerangkatAjarApp() {
+        function renderPerangkatAjarApp(initialTab = 'modul') {
             const app = document.getElementById('app');
             app.innerHTML = `
                 <div class="max-w-6xl mx-auto w-full p-4 md:p-6 space-y-6">
@@ -404,7 +510,7 @@
                             <button onclick="enterPortal('jurnal')" class="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-xs font-semibold transition">
                                 Pindah Portal <i class="fa-solid fa-right-left ml-1"></i>
                             </button>
-                            <button onclick="currentUser=null; renderAuth('login')" class="px-3 py-2 bg-rose-500 hover:bg-rose-600 rounded-xl text-xs font-semibold transition">
+                            <button onclick="clearSessionAndGoLogin()" class="px-3 py-2 bg-rose-500 hover:bg-rose-600 rounded-xl text-xs font-semibold transition">
                                 Keluar
                             </button>
                         </div>
@@ -425,10 +531,14 @@
                     <div id="perangkatContent"></div>
                 </div>
             `;
-            switchPerangkatTab('modul');
+            switchPerangkatTab(initialTab);
         }
 
         function switchPerangkatTab(tab) {
+            activePortal = 'perangkat';
+            activeSubTab = tab;
+            persistSessionState();
+
             ['Modul', 'Kisi', 'Soal'].forEach(t => {
                 const el = document.getElementById('pTab' + t);
                 if (el) {
@@ -690,7 +800,7 @@ Penerapan konsep ini bermanfaat langsung dalam memecahkan permasalahan kehidupan
         }
 
         // ==================== 2. PORTAL JURNAL GURU ====================
-        function renderJurnalGuruApp() {
+        function renderJurnalGuruApp(initialTab = 'jadwal') {
             const app = document.getElementById('app');
             app.innerHTML = `
                 <div class="max-w-6xl mx-auto w-full p-4 md:p-6 space-y-6">
@@ -709,7 +819,7 @@ Penerapan konsep ini bermanfaat langsung dalam memecahkan permasalahan kehidupan
                             <button onclick="enterPortal('perangkat')" class="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-xs font-semibold transition">
                                 Pindah Portal <i class="fa-solid fa-right-left ml-1"></i>
                             </button>
-                            <button onclick="currentUser=null; renderAuth('login')" class="px-3.5 py-2 bg-rose-500 hover:bg-rose-600 rounded-xl text-xs font-semibold transition">
+                            <button onclick="clearSessionAndGoLogin()" class="px-3.5 py-2 bg-rose-500 hover:bg-rose-600 rounded-xl text-xs font-semibold transition">
                                 Keluar
                             </button>
                         </div>
@@ -734,7 +844,7 @@ Penerapan konsep ini bermanfaat langsung dalam memecahkan permasalahan kehidupan
                 </div>
             `;
             startLiveClock();
-            switchJurnalTab('jadwal');
+            switchJurnalTab(initialTab);
         }
 
         function startLiveClock() {
@@ -807,6 +917,10 @@ Penerapan konsep ini bermanfaat langsung dalam memecahkan permasalahan kehidupan
         }
 
         function switchJurnalTab(tab) {
+            activePortal = 'jurnal';
+            activeSubTab = tab;
+            persistSessionState();
+
             ['Jadwal', 'Siswa', 'Presensi', 'Nilai'].forEach(t => {
                 const el = document.getElementById('jTab' + t);
                 if (el) {
@@ -1402,7 +1516,34 @@ Penerapan konsep ini bermanfaat langsung dalam memecahkan permasalahan kehidupan
             });
         }
 
-        renderAuth('login');
+        // ==================== INISIALISASI SAAT HALAMAN DIMUAT ====================
+        setupActivityListeners();
+
+        (function bootApp() {
+            const rawSession = localStorage.getItem(SESSION_STORAGE_KEY);
+            if (!rawSession || isSessionExpiredByIdle()) {
+                localStorage.removeItem(SESSION_STORAGE_KEY);
+                renderAuth('login');
+                return;
+            }
+            try {
+                const session = JSON.parse(rawSession);
+                currentUser = normalizeEmail(session.email);
+                currentUserName = session.name || currentUser.split('@')[0];
+                hydrateUserData(currentUser, null);
+                touchUserActivity();
+
+                if (session.activePortal === 'perangkat') {
+                    enterPortal('perangkat', session.activeSubTab || 'modul');
+                } else if (session.activePortal === 'jurnal') {
+                    enterPortal('jurnal', session.activeSubTab || 'jadwal');
+                } else {
+                    renderPortalSelector();
+                }
+            } catch (e) {
+                renderAuth('login');
+            }
+        })();
     </script>
 </body>
 </html>
